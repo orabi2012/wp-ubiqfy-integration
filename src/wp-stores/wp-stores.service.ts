@@ -32,8 +32,8 @@ export class wpStoresService {
     return await this.wpStoreRepo.findOne({ where: { id } });
   }
 
-  async findBywpStoreId(wp_store_id: string): Promise<wpStore | null> {
-    return await this.wpStoreRepo.findOne({ where: { wp_store_id } });
+  async findByStoreUrl(wp_store_url: string): Promise<wpStore | null> {
+    return await this.wpStoreRepo.findOne({ where: { wp_store_url } });
   }
 
   async findActiveStores(): Promise<wpStore[]> {
@@ -403,16 +403,15 @@ export class wpStoresService {
   }
 
   /**
-   * Get product stock from wp API by product ID
+   * Get product stock from WooCommerce API by product ID
    */
-  async getwpProductStock(accessToken: string, productId: string): Promise<any> {
-    const wpBaseUrl = this.configService.get<string>('wp_BASE_URL');
-
+  async getwpProductStock(store: wpStore, productId: string): Promise<any> {
     try {
-      const response = await fetch(`${wpBaseUrl}/products/${productId}`, {
+      const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
+      const response = await fetch(`${store.wp_store_url}/wp-json/wc/v3/products/${productId}`, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': `Basic ${auth}`,
           'Content-Type': 'application/json',
         }
       });
@@ -422,7 +421,7 @@ export class wpStoresService {
       }
 
       const data = await response.json();
-      return data.data; // wp API returns data in a wrapper
+      return data;
     } catch (error) {
       console.error(`Error fetching stock for product ${productId}:`, error);
       throw error;
@@ -449,13 +448,15 @@ export class wpStoresService {
 
       if (!actualwpProductId) {
         return { success: false, message: 'Product is not synced to wp' };
-      } const store = option.storeProduct.wpStore;
-      if (!store.wp_access_token) {
-        return { success: false, message: 'Store access token not available' };
       }
 
-      // Get product data from wp using the correct product ID from database
-      const productData = await this.getwpProductStock(store.wp_access_token, actualwpProductId);
+      const store = option.storeProduct.wpStore;
+      if (!store.wp_consumer_key || !store.wp_consumer_secret) {
+        return { success: false, message: 'Store WooCommerce credentials not available' };
+      }
+
+      // Get product data from WooCommerce using the correct product ID from database
+      const productData = await this.getwpProductStock(store, actualwpProductId);
 
       // Find the matching SKU in the product data
       let stockQuantity: number | null = null;
@@ -510,8 +511,8 @@ export class wpStoresService {
         return { success: false, updated: 0, errors: 1, message: 'Store not found' };
       }
 
-      if (!store.wp_access_token) {
-        return { success: false, updated: 0, errors: 1, message: 'Store access token not available' };
+      if (!store.wp_consumer_key || !store.wp_consumer_secret) {
+        return { success: false, updated: 0, errors: 1, message: 'Store WooCommerce credentials not available' };
       }
 
       // Get all synced product options for this store

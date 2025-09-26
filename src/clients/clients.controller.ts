@@ -274,7 +274,7 @@ export class ClientsController {
 
       // Define protected fields that only superadmins can modify
       const protectedFields = [
-        'wp_store_id',
+        'wp_store_url',
         'wp_store_name',
         'ubiqfy_producttypecode',
         'sku_prefix'
@@ -298,7 +298,7 @@ export class ClientsController {
 
       // Only allow superadmins to update protected fields
       if (req.user.isSuperadmin) {
-        updateData.wp_store_id = body.wp_store_id;
+        updateData.wp_store_url = body.wp_store_url;
         updateData.wp_store_name = body.wp_store_name;
         updateData.ubiqfy_producttypecode = body.ubiqfy_producttypecode;
         updateData.sku_prefix = body.sku_prefix || 'UBQ';

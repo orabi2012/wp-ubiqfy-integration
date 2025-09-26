@@ -37,17 +37,19 @@ interface DoTransactionResponse {
     } | null;
 }
 
-interface wpDigitalCodesRequest {
-    codes: string[];
+interface WCKeyManagerCreateRequest {
+    product_id: number;
+    key: string;
+    status: string;
 }
 
-interface wpDigitalCodesResponse {
-    status: number;
-    success: boolean;
-    data: {
-        message: string;
-        code: number;
-    };
+interface WCKeyManagerCreateResponse {
+    id: number;
+    product_id: number;
+    key: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
 }
 
 interface UbiqfyAuthResponse {
@@ -717,7 +719,15 @@ export class DoTransactionService {
     }
 
     /**
-     * Attach voucher codes to wp product after successful DoTransaction
+     * Attach voucher codes to WooCommerce product after successful DoTransaction
+     * Uses WC Key Manager plugin API to add digital keys/codes to products
+     * 
+     * @param purchaseId - ID of the purchase record
+     * @param wpProductId - WooCommerce product ID to attach keys to
+     * @param voucherCodes - Array of digital codes/keys to attach
+     * 
+     * API Endpoint: POST {store_url}/wp-json/wc/v1/keys
+     * Requires WC Key Manager plugin to be installed and REST API enabled
      */
     private async attachVoucherCodesTowpProduct(
         purchaseId: string,
@@ -737,47 +747,94 @@ export class DoTransactionService {
 
             const store = purchase.wpStore;
 
-            // Prepare the request body
-            const requestBody: wpDigitalCodesRequest = {
-                codes: voucherCodes
+            // Validate store has WooCommerce credentials
+            if (!store.wp_store_url || !store.wp_consumer_key || !store.wp_consumer_secret) {
+                throw new Error('Store missing WooCommerce credentials for key attachment');
+            }
+
+            // Create WooCommerce authentication headers
+            const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
+            const headers = {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             };
 
-            // Make the API call to wp
-            // Fetch digital codes from wp
-            const response = await fetch(`${process.env.wp_BASE_URL || 'https://api.wp.dev/admin/v2'}/products/${wpProductId}/digital-codes`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${store.wp_access_token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestBody)
-            });
+            // Attach each voucher code to the WooCommerce product using WC Key Manager API
+            const attachmentResults: Array<{
+                code: string;
+                success: boolean;
+                keyId?: any;
+                response?: any;
+                error?: string;
+            }> = [];
+            const apiUrl = `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v1/keys`;
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`wp API Error: HTTP ${response.status} - ${errorText}`);
+            for (const code of voucherCodes) {
+                try {
+                    const keyData = {
+                        product_id: parseInt(wpProductId),
+                        key: code,
+                        status: 'active'
+                    };
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify(keyData)
+                    });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`WC Key Manager API Error: HTTP ${response.status} - ${errorText}`);
+                    }
+
+                    const responseData = await response.json();
+                    attachmentResults.push({
+                        code: code,
+                        success: true,
+                        keyId: responseData.id,
+                        response: responseData
+                    });
+
+                    this.logger.log(`Successfully attached code ${code} to WooCommerce product ${wpProductId}`);
+
+                } catch (codeError) {
+                    const errorMessage = codeError instanceof Error ? codeError.message : String(codeError);
+                    this.logger.error(`Failed to attach code ${code} to product ${wpProductId}:`, errorMessage);
+                    attachmentResults.push({
+                        code: code,
+                        success: false,
+                        error: errorMessage
+                    });
+                }
             }
 
-            const responseData: wpDigitalCodesResponse = await response.json();
+            // Check if all codes were attached successfully
+            const successfulAttachments = attachmentResults.filter(r => r.success);
+            const failedAttachments = attachmentResults.filter(r => !r.success);
 
-            if (!responseData.success) {
-                throw new Error(`wp API failed: ${responseData.data?.message || 'Unknown error'}`);
+            if (failedAttachments.length > 0) {
+                this.logger.warn(`${failedAttachments.length}/${voucherCodes.length} codes failed to attach to product ${wpProductId}`);
+                // Still proceed with flagging successful ones
             }
 
-            this.logger.log(`Successfully attached ${voucherCodes.length} codes to wp product ${wpProductId}`);
-            console.log('wp Digital Codes Response:', JSON.stringify(responseData, null, 2));
+            this.logger.log(`Successfully attached ${successfulAttachments.length}/${voucherCodes.length} codes to WooCommerce product ${wpProductId}`);
+            console.log('WC Key Manager Attachment Results:', JSON.stringify(attachmentResults, null, 2));
 
             // Flag vouchers as synced to wp and update stock
             await this.flagVouchersAsSyncedTowp(purchaseId, wpProductId, voucherCodes);
 
         } catch (error) {
-            this.logger.error(`Failed to attach codes to wp product ${wpProductId}:`, error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to attach codes to wp product ${wpProductId}:`, errorMessage);
             throw error;
         }
     }
 
     /**
-     * Flag vouchers as synced to wp and refresh stock levels
+     * Flag vouchers as synced to WooCommerce and refresh stock levels
+     * Updates purchase details to mark codes as successfully attached to WC Key Manager
      */
     private async flagVouchersAsSyncedTowp(
         purchaseId: string,

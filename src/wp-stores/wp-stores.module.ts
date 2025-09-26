@@ -9,12 +9,7 @@ import { wpStoresService } from './wp-stores.service';
 import { wpStoreProductsService } from './wp-store-products.service';
 import { wpStoreProductOptionsService } from './wp-store-product-options.service';
 import { wpIntegrationService } from './wp-integration.service';
-import { wpOAuthService } from './wp-oauth.service';
-import { wpWebhookService } from './wp-webhook.service';
-import { wpWebhookManagementService } from './wp-webhook-management.service';
 import { wpStoresController } from './wp-stores.controller';
-import { wpDevController } from './wp-dev.controller';
-import { wpWebhookController } from './wp-webhook.controller';
 import { UbiqfyProductsModule } from '../ubiqfy-products/ubiqfy-products.module';
 
 @Module({
@@ -23,8 +18,8 @@ import { UbiqfyProductsModule } from '../ubiqfy-products/ubiqfy-products.module'
         ConfigModule,
         UbiqfyProductsModule
     ],
-    controllers: [wpStoresController, wpDevController, wpWebhookController],
-    providers: [wpStoresService, wpStoreProductsService, wpStoreProductOptionsService, wpIntegrationService, wpOAuthService, wpWebhookService, wpWebhookManagementService],
-    exports: [wpStoresService, wpStoreProductsService, wpStoreProductOptionsService, wpIntegrationService, wpOAuthService, wpWebhookService, wpWebhookManagementService],
+    controllers: [wpStoresController],
+    providers: [wpStoresService, wpStoreProductsService, wpStoreProductOptionsService, wpIntegrationService],
+    exports: [wpStoresService, wpStoreProductsService, wpStoreProductOptionsService, wpIntegrationService],
 })
 export class wpStoresModule { }

@@ -15,7 +15,6 @@ import { wpStoresService } from './wp-stores.service';
 import { wpStoreProductsService } from './wp-store-products.service';
 import { wpStoreProductOptionsService } from './wp-store-product-options.service';
 import { wpIntegrationService } from './wp-integration.service';
-import { wpWebhookManagementService } from './wp-webhook-management.service';
 import { wpStore, SyncStatus } from './wp-stores.entity';
 import { SuperAdminGuard } from '../auth/super-admin.guard';
 import { StoreAccessGuard } from '../auth/store-access.guard';
@@ -29,7 +28,6 @@ export class wpStoresController {
     private readonly storeProductsService: wpStoreProductsService,
     private readonly storeProductOptionsService: wpStoreProductOptionsService,
     private readonly wpIntegrationService: wpIntegrationService,
-    private readonly wpWebhookManagementService: wpWebhookManagementService,
   ) { }
 
   private validateUUID(id: string): void {
@@ -43,20 +41,20 @@ export class wpStoresController {
   async create(@Body() createStoreDto: Partial<wpStore>) {
     try {
       // Validate required fields
-      if (!createStoreDto.wp_store_id) {
+      if (!createStoreDto.wp_store_url) {
         throw new HttpException(
-          'wp Store ID is required',
+          'WooCommerce Store URL is required',
           HttpStatus.BAD_REQUEST,
         );
       }
 
       // Check if store already exists
-      const existingStore = await this.wpStoresService.findBywpStoreId(
-        createStoreDto.wp_store_id,
+      const existingStore = await this.wpStoresService.findByStoreUrl(
+        createStoreDto.wp_store_url,
       );
       if (existingStore) {
         throw new HttpException(
-          'Store with this wp Store ID already exists',
+          'Store with this URL already exists',
           HttpStatus.CONFLICT,
         );
       }
@@ -521,12 +519,12 @@ export class wpStoresController {
     }
   }
 
-  @Post(':id/force-reauth')
+  @Post(':id/clear-credentials')
   @UseGuards(StoreAccessGuard)
-  async forceReauthorization(@Param('id') storeId: string) {
+  async clearWooCommerceCredentials(@Param('id') storeId: string) {
     this.validateUUID(storeId);
     try {
-      const result = await this.wpIntegrationService.forceReauthorization(storeId);
+      const result = await this.wpIntegrationService.clearWooCommerceCredentials(storeId);
       return {
         success: true,
         data: result,
@@ -635,130 +633,7 @@ export class wpStoresController {
     }
   }
 
-  // =====================
-  // WEBHOOK MANAGEMENT
-  // =====================
 
-  /**
-   * Register webhooks for a store
-   * POST /wp-stores/:id/webhooks/register
-   * Body: { "webhook_base_url": "https://yourdomain.com" }
-   */
-  @Post(':id/webhooks/register')
-  async registerWebhooks(
-    @Param('id') id: string,
-    @Body() body: { webhook_base_url: string },
-  ) {
-    this.validateUUID(id);
-
-    if (!body.webhook_base_url) {
-      throw new HttpException(
-        'webhook_base_url is required',
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-
-    try {
-      const results =
-        await this.wpWebhookManagementService.registerWebhooksForStore(
-          id,
-          body.webhook_base_url,
-        );
-
-      return {
-        message: 'Webhook registration completed',
-        success: true,
-        data: {
-          total_webhooks: results.length,
-          successful: results.filter((r) => r.status === 'success').length,
-          failed: results.filter((r) => r.status === 'failed').length,
-          results: results,
-        },
-      };
-    } catch (error) {
-      throw new HttpException(
-        `Failed to register webhooks: ${error.message}`,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-  }
-
-  /**
-   * List webhooks for a store
-   * GET /wp-stores/:id/webhooks
-   */
-  @Get(':id/webhooks')
-  async listWebhooks(@Param('id') id: string) {
-    this.validateUUID(id);
-
-    try {
-      const webhooks =
-        await this.wpWebhookManagementService.listWebhooks(id);
-      return {
-        message: 'Webhooks retrieved successfully',
-        success: true,
-        data: webhooks,
-      };
-    } catch (error) {
-      throw new HttpException(
-        `Failed to list webhooks: ${error.message}`,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-  }
-
-  /**
-   * Get available webhook events
-   * GET /wp-stores/:id/webhooks/events
-   */
-  @Get(':id/webhooks/events')
-  async getWebhookEvents(@Param('id') id: string) {
-    this.validateUUID(id);
-
-    try {
-      const events =
-        await this.wpWebhookManagementService.getWebhookEvents(id);
-      return {
-        message: 'Webhook events retrieved successfully',
-        success: true,
-        data: events,
-      };
-    } catch (error) {
-      throw new HttpException(
-        `Failed to get webhook events: ${error.message}`,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-  }
-
-  /**
-   * Deactivate a specific webhook
-   * DELETE /wp-stores/:id/webhooks/:webhook_id
-   */
-  @Delete(':id/webhooks/:webhook_id')
-  async deactivateWebhook(
-    @Param('id') id: string,
-    @Param('webhook_id') webhookId: string,
-  ) {
-    this.validateUUID(id);
-
-    try {
-      const result = await this.wpWebhookManagementService.deactivateWebhook(
-        id,
-        parseInt(webhookId),
-      );
-      return {
-        message: 'Webhook deactivated successfully',
-        success: true,
-        data: result,
-      };
-    } catch (error) {
-      throw new HttpException(
-        `Failed to deactivate webhook: ${error.message}`,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-  }
 
   @Post('migrate-to-new-options-system')
   async migrateToNewOptionsSystem() {

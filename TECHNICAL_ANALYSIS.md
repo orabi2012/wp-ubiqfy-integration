@@ -4,7 +4,7 @@
 
 The wp-Ubiqfy Integration Platform is a comprehensive B2B e-commerce integration solution that bridges wp (Saudi Arabia's leading e-commerce platform) with Ubiqfy's digital voucher services. This platform enables seamless automated voucher sales, inventory management, and order processing through sophisticated API integrations and real-time webhook systems.
 
-**Key Technologies**: NestJS, TypeScript, PostgreSQL, EJS Templates, Bootstrap, JWT Authentication
+**Key Technologies**: NestJS, TypeScript, MySQL, EJS Templates, Bootstrap, JWT Authentication
 
 ---
 
@@ -18,7 +18,7 @@ The wp-Ubiqfy Integration Platform is a comprehensive B2B e-commerce integration
 - **Node.js v18+** - JavaScript runtime environment
 
 #### Database & ORM
-- **PostgreSQL v13+** - Production-ready relational database
+- **MySQL v8+** - Popular open source relational database
 - **TypeORM v0.3.x** - Feature-rich Object-Relational Mapping library
 - **Database Migrations** - Version-controlled schema management
 
@@ -77,7 +77,7 @@ graph TB
 
     %% Data Layer
     subgraph "Data Layer"
-        DB[(PostgreSQL Database)]
+        DB[(MySQL Database)]
         ENTITIES[TypeORM Entities]
         MIGRATIONS[Database Migrations]
     end

@@ -24,7 +24,7 @@ export class wpStore {
   id: string;
 
   @Column({ unique: true })
-  wp_store_id: string;
+  wp_store_url: string;
 
   @Column({ unique: true })
   wp_store_name: string;
@@ -36,13 +36,10 @@ export class wpStore {
   wp_owner_email: string;
 
   @Column()
-  wp_access_token: string;
-
-  @Column({ type: 'timestamp', nullable: true })
-  wp_token_expiry: Date;
+  wp_consumer_key: string;
 
   @Column()
-  wp_refresh_token: string;
+  wp_consumer_secret: string;
 
   @Column({ nullable: true })
   wp_webhook_key: string; // Webhook secret key for signature verification

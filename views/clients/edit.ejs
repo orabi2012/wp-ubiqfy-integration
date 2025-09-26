@@ -33,7 +33,7 @@
                                         <h5 class="mb-1">
                                             <%= store.wp_store_name %>
                                         </h5>
-                                        <p class="text-muted mb-0">Store ID: <%= store.wp_store_id %>
+                                        <p class="text-muted mb-0">Store URL: <%= store.wp_store_url %>
                                         </p>
                                     </div>
                                     <div class="text-end">
@@ -125,16 +125,15 @@
                                                 <form method="POST" action="/clients/edit/<%= store.id %>">
                                                     <div class="row">
                                                         <div class="col-md-6 mb-3">
-                                                            <label for="wp_store_id" class="form-label">wp
+                                                            <label for="wp_store_url" class="form-label">WooCommerce
                                                                 Store
-                                                                ID
+                                                                URL
                                                                 *</label>
-                                                            <input type="text" class="form-control" id="wp_store_id"
-                                                                name="wp_store_id"
-                                                                value="<%= store.wp_store_id %>" <% if
-                                                                (!user.isSuperadmin) { %>readonly
+                                                            <input type="url" class="form-control" id="wp_store_url"
+                                                                name="wp_store_url" value="<%= store.wp_store_url %>" <%
+                                                                if (!user.isSuperadmin) { %>readonly
                                                             style="background-color: #f8f9fa;" <% } %>
-                                                                required>
+                                                                required placeholder="https://yourstore.com">
                                                                 <% if (!user.isSuperadmin) { %>
                                                                     <div class="form-text text-warning">
                                                                         <i class="fas fa-lock"></i> Protected
@@ -146,10 +145,9 @@
                                                         <div class="col-md-6 mb-3">
                                                             <label for="wp_store_name" class="form-label">Store Name
                                                                 *</label>
-                                                            <input type="text" class="form-control"
-                                                                id="wp_store_name" name="wp_store_name"
-                                                                value="<%= store.wp_store_name %>" <% if
-                                                                (!user.isSuperadmin) { %>readonly
+                                                            <input type="text" class="form-control" id="wp_store_name"
+                                                                name="wp_store_name" value="<%= store.wp_store_name %>"
+                                                                <% if (!user.isSuperadmin) { %>readonly
                                                             style="background-color: #f8f9fa;" <% } %>
                                                                 required>
                                                                 <% if (!user.isSuperadmin) { %>
@@ -166,16 +164,16 @@
                                                         <div class="col-md-6 mb-3">
                                                             <label for="wp_owner_name" class="form-label">Owner Name
                                                                 *</label>
-                                                            <input type="text" class="form-control"
-                                                                id="wp_owner_name" name="wp_owner_name"
-                                                                value="<%= store.wp_owner_name %>" required>
+                                                            <input type="text" class="form-control" id="wp_owner_name"
+                                                                name="wp_owner_name" value="<%= store.wp_owner_name %>"
+                                                                required>
                                                         </div>
                                                         <div class="col-md-6 mb-3">
                                                             <label for="wp_owner_email" class="form-label">Owner
                                                                 Email
                                                                 *</label>
-                                                            <input type="email" class="form-control"
-                                                                id="wp_owner_email" name="wp_owner_email"
+                                                            <input type="email" class="form-control" id="wp_owner_email"
+                                                                name="wp_owner_email"
                                                                 value="<%= store.wp_owner_email %>" required>
                                                         </div>
                                                     </div>
@@ -219,6 +217,31 @@
                                                                 1 USD =
                                                                 3.75
                                                                 SAR</small>
+                                                        </div>
+                                                    </div>
+
+                                                    <h5 class="mt-4 mb-3"><i class="fas fa-shopping-cart"></i>
+                                                        WooCommerce API
+                                                        Credentials</h5>
+                                                    <div class="row">
+                                                        <div class="col-md-6 mb-3">
+                                                            <label for="wp_consumer_key" class="form-label">Consumer Key
+                                                                *</label>
+                                                            <input type="text" class="form-control" id="wp_consumer_key"
+                                                                name="wp_consumer_key"
+                                                                value="<%= store.wp_consumer_key || '' %>" required>
+                                                            <small class="form-text text-muted">Your WooCommerce REST
+                                                                API consumer key</small>
+                                                        </div>
+                                                        <div class="col-md-6 mb-3">
+                                                            <label for="wp_consumer_secret" class="form-label">Consumer
+                                                                Secret
+                                                                *</label>
+                                                            <input type="password" class="form-control"
+                                                                id="wp_consumer_secret" name="wp_consumer_secret"
+                                                                value="<%= store.wp_consumer_secret || '' %>" required>
+                                                            <small class="form-text text-muted">Your WooCommerce REST
+                                                                API consumer secret</small>
                                                         </div>
                                                     </div>
 

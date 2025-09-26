@@ -33,7 +33,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
                 }
 
                 return {
-                    type: 'postgres',
+                    type: 'mysql',
                     host: dbHost,
                     port: config.get<number>('DB_PORT'),
                     username: config.get<string>('DB_USERNAME'),
@@ -52,12 +52,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
                     ],
                     synchronize: !isProduction,
                     ssl: sslConfig,
-                    timezone: 'Asia/Riyadh', // KSA timezone (UTC+3)
+                    timezone: '+03:00', // KSA timezone (UTC+3) for MySQL
                     extra: {
-                        connectionTimeoutMillis: 10000,
-                        idleTimeoutMillis: 10000,
-                        // Set PostgreSQL timezone for this connection
-                        timezone: 'Asia/Riyadh',
+                        connectionLimit: 10,
+                        acquireTimeout: 60000,
+                        timeout: 60000,
+                        // Set MySQL timezone for this connection
+                        timezone: '+03:00',
                     }
                 };
             },

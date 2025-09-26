@@ -6,7 +6,6 @@ import { wpStoreProduct } from './wp-store-products.entity';
 import { wpStoreProductOption } from './wp-store-product-option.entity';
 import { wpStoreProductOptionsService } from './wp-store-product-options.service';
 import { UbiqfyProduct } from '../ubiqfy-products/ubiqfy-product.entity';
-import { wpOAuthService } from './wp-oauth.service';
 import { wpStoresService } from './wp-stores.service';
 import axios from 'axios';
 
@@ -33,7 +32,6 @@ export interface wpProduct {
 
 @Injectable()
 export class wpIntegrationService {
-  private readonly wp_BASE_URL = process.env.wp_BASE_URL || 'https://api.wp.dev/admin/v2';
 
   constructor(
     @InjectRepository(wpStore)
@@ -44,13 +42,23 @@ export class wpIntegrationService {
     private readonly storeProductOptionRepository: Repository<wpStoreProductOption>,
     @InjectRepository(UbiqfyProduct)
     private readonly ubiqfyProductRepository: Repository<UbiqfyProduct>,
-    private readonly wpOAuthService: wpOAuthService,
     private readonly wpStoresService: wpStoresService,
     private readonly optionsService: wpStoreProductOptionsService,
   ) { }
 
   /**
-   * Get the wp client ID from environment variables
+   * Get WooCommerce authentication headers
+   */
+  private getWooCommerceHeaders(store: wpStore): Record<string, string> {
+    const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
+    return {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  /**
+   * Get the wp client ID from environment variables (legacy - can be removed)
    */
   private getwpClientId(): string {
     const clientId = process.env.wp_CLIENT_ID;
@@ -83,8 +91,8 @@ export class wpIntegrationService {
       throw new HttpException('Store not found', HttpStatus.NOT_FOUND);
     }
 
-    // Ensure we have a valid wp access token (with automatic refresh)
-    await this.ensureValidwpToken(store);
+    // Validate WooCommerce credentials
+    await this.validateWooCommerceCredentials(store);
 
     // Get store currency from wp API (always fresh)
     const storeInfo = await this.getStoreInfo(store);
@@ -105,7 +113,7 @@ export class wpIntegrationService {
 
     // Get all linked products for this store with their options
     const storeProducts = await this.storeProductRepository.find({
-      where: { wp_store_id: storeId, is_active: true },
+      where: { wpStore: { id: storeId }, is_active: true },
       relations: ['ubiqfyProduct', 'ubiqfyProduct.options', 'options'],
     });
 
@@ -153,7 +161,7 @@ export class wpIntegrationService {
 
     // Refresh store products to get the newly created options
     const refreshedStoreProducts = await this.storeProductRepository.find({
-      where: { wp_store_id: storeId, is_active: true },
+      where: { wpStore: { id: storeId }, is_active: true },
       relations: ['ubiqfyProduct', 'ubiqfyProduct.options', 'options'],
     });
 
@@ -164,12 +172,9 @@ export class wpIntegrationService {
         'Fetching existing wp products for efficient update checking...',
       );
       const existingProductsResponse = await axios.get(
-        `${this.wp_BASE_URL}/products`,
+        `${store.wp_store_url}/wp-json/wc/v3/products`,
         {
-          headers: {
-            Authorization: `Bearer ${store.wp_access_token}`,
-            Accept: 'application/json',
-          },
+          headers: this.getWooCommerceHeaders(store),
           params: {
             per_page: 100, // Get more products per page
           },
@@ -566,11 +571,7 @@ export class wpIntegrationService {
     },
     cache?: Map<string, wpCategory>,
   ): Promise<wpCategory> {
-    const headers = {
-      Authorization: `Bearer ${store.wp_access_token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    };
+    const headers = this.getWooCommerceHeaders(store);
 
     // First, check the cache if provided (for subcategories)
     if (cache && categoryData.parent_id) {
@@ -590,10 +591,10 @@ export class wpIntegrationService {
         `🔍 Searching for existing category: "${categoryData.name}" with parent_id: ${categoryData.parent_id || 'none'}`,
       );
       const existingResponse = await axios.get(
-        `${this.wp_BASE_URL}/categories`,
+        `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/categories`,
         {
           headers,
-          params: { name: categoryData.name },
+          params: { search: categoryData.name },
         },
       );
 
@@ -664,7 +665,7 @@ export class wpIntegrationService {
         console.warn('   Image URL that would be used:', categoryData.image);
       }
       const response = await axios.post(
-        `${this.wp_BASE_URL}/categories`,
+        `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/categories`,
         categoryPayload,
         {
           headers,
@@ -748,11 +749,7 @@ export class wpIntegrationService {
       existingProductsMap,
     } = productData;
 
-    const headers = {
-      Authorization: `Bearer ${store.wp_access_token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    };
+    const headers = this.getWooCommerceHeaders(store);
 
     // Validate that min_value equals max_value (no price range) - safety check
     if (option.min_value !== option.max_value) {
@@ -858,7 +855,7 @@ export class wpIntegrationService {
           prefixedSku,
         );
         const existingProductsResponse = await axios.get(
-          `${this.wp_BASE_URL}/products`,
+          `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products`,
           {
             headers,
             params: { sku: prefixedSku },
@@ -890,7 +887,7 @@ export class wpIntegrationService {
 
       try {
         const updateResponse = await axios.put(
-          `${this.wp_BASE_URL}/products/${existingProduct.id}`,
+          `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/${existingProduct.id}`,
           updatePayload,
           { headers },
         );
@@ -923,7 +920,7 @@ export class wpIntegrationService {
     try {
       console.log('Creating new wp product:', productPayload);
       const response = await axios.post(
-        `${this.wp_BASE_URL}/products`,
+        `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products`,
         productPayload,
         { headers },
       );
@@ -978,20 +975,17 @@ export class wpIntegrationService {
       throw new HttpException('Store not found', HttpStatus.NOT_FOUND);
     }
 
-    const headers = {
-      Authorization: `Bearer ${store.wp_access_token}`,
-      Accept: 'application/json',
-    };
+    const headers = this.getWooCommerceHeaders(store);
 
     try {
       const allCategories: wpCategory[] = [];
       let page = 1;
       let hasMore = true;
 
-      console.log('🔍 Fetching all wp categories with pagination...');
+      console.log('🔍 Fetching all WooCommerce categories with pagination...');
 
       while (hasMore) {
-        const response = await axios.get(`${this.wp_BASE_URL}/categories`, {
+        const response = await axios.get(`${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/categories`, {
           headers,
           params: {
             page: page,
@@ -1050,13 +1044,10 @@ export class wpIntegrationService {
       throw new HttpException('Store not found', HttpStatus.NOT_FOUND);
     }
 
-    const headers = {
-      Authorization: `Bearer ${store.wp_access_token}`,
-      Accept: 'application/json',
-    };
+    const headers = this.getWooCommerceHeaders(store);
 
     try {
-      const response = await axios.get(`${this.wp_BASE_URL}/products`, {
+      const response = await axios.get(`${store.wp_store_url}/wp-json/wc/v3/products`, {
         headers,
       });
       return response.data.data || [];
@@ -1087,21 +1078,18 @@ export class wpIntegrationService {
         return { connected: false, error: 'Store not found' };
       }
 
-      if (!store.wp_access_token) {
-        return { connected: false, error: 'No wp access token configured' };
+      if (!store.wp_consumer_key || !store.wp_consumer_secret) {
+        return { connected: false, error: 'No WooCommerce credentials configured' };
       }
 
-      const headers = {
-        Authorization: `Bearer ${store.wp_access_token}`,
-        Accept: 'application/json',
-      };
+      const headers = this.getWooCommerceHeaders(store);
 
       console.log(
-        'Testing wp connection with token:',
-        store.wp_access_token.substring(0, 20) + '...',
+        'Testing WooCommerce connection with consumer key:',
+        store.wp_consumer_key.substring(0, 10) + '...',
       );
 
-      const response = await axios.get(`${this.wp_BASE_URL}/store/info`, {
+      const response = await axios.get(`${store.wp_store_url}/wp-json/wc/v3/system_status`, {
         headers,
         timeout: 10000,
       });
@@ -1118,42 +1106,7 @@ export class wpIntegrationService {
         message: error.message,
       });
 
-      // Get store again for the error handling block
-      const store = await this.wpStoreRepository.findOne({
-        where: { id: storeId },
-      });
 
-      // If token is invalid (401), try to refresh it automatically
-      if (error.response?.status === 401 && store?.wp_refresh_token) {
-        console.log('🔄 Token invalid, attempting automatic refresh...');
-        try {
-          await this.ensureValidwpToken(store);
-
-          // Retry the connection test with refreshed token
-          const newHeaders = {
-            Authorization: `Bearer ${store.wp_access_token}`,
-            Accept: 'application/json',
-          };
-
-          const retryResponse = await axios.get(`${this.wp_BASE_URL}/store/info`, {
-            headers: newHeaders,
-            timeout: 10000,
-          });
-
-          return {
-            connected: true,
-            storeInfo: retryResponse.data.data,
-            refreshAttempted: true,
-          };
-        } catch (refreshError) {
-          console.error('❌ Automatic token refresh failed:', refreshError.message);
-          return {
-            connected: false,
-            error: `Token invalid and refresh failed: ${refreshError.message}. Manual re-authorization required.`,
-            refreshAttempted: true,
-          };
-        }
-      }
 
       return {
         connected: false,
@@ -1162,7 +1115,8 @@ export class wpIntegrationService {
     }
   }
 
-  // Helper method to verify product-category link
+  // TODO: Remove - Legacy Salla method, not needed for WooCommerce
+  /*
   private async verifyProductCategoryLink(
     productId: number,
     expectedCategoryId: number,
@@ -1210,8 +1164,10 @@ export class wpIntegrationService {
       console.warn('Could not verify product-category link:', error.message);
     }
   }
+  */
 
-  // Helper method to manually link product to category
+  // TODO: Remove - Legacy Salla method, not needed for WooCommerce
+  /*
   private async linkProductToCategory(
     productId: number,
     categoryId: number,
@@ -1239,6 +1195,7 @@ export class wpIntegrationService {
       );
     }
   }
+  */
 
   // Helper method to attach image to product using wp's image API
   private async attachImageToProduct(
@@ -1251,16 +1208,14 @@ export class wpIntegrationService {
         `🖼️  Attempting to attach image to product ${productId}: ${imageUrl}`,
       );
 
-      const headers = {
-        Authorization: `Bearer ${store.wp_access_token}`,
-        Accept: 'application/json',
-      };
+      const headers = this.getWooCommerceHeaders(store);
 
       // Check if the product already has any images
       try {
         console.log(`🔍 Checking existing images for product ${productId}...`);
+        // TODO: Update to use WooCommerce media API endpoints
         const productResponse = await axios.get(
-          `${this.wp_BASE_URL}/products/${productId}`,
+          `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/${productId}`,
           { headers },
         );
         const existingImages = productResponse.data.data?.images || [];
@@ -1336,11 +1291,12 @@ export class wpIntegrationService {
           ...formData.getHeaders(),
         };
 
+        // TODO: Replace with WooCommerce media upload API
         const uploadResponse = await axios.post(
-          `${this.wp_BASE_URL}/products/${productId}/images`,
-          formData,
+          `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/${productId}`,
+          { images: [{ src: imageUrl }] },
           {
-            headers: formHeaders,
+            headers,
             timeout: 30000, // 30 second timeout for upload
           },
         );
@@ -1369,11 +1325,12 @@ export class wpIntegrationService {
           ...formData.getHeaders(),
         };
 
+        // TODO: Replace with WooCommerce media API
         const urlResponse = await axios.post(
-          `${this.wp_BASE_URL}/products/${productId}/images`,
-          formData,
+          `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/${productId}`,
+          { images: [{ src: imageUrl }] },
           {
-            headers: formHeaders,
+            headers,
           },
         );
 
@@ -1395,9 +1352,10 @@ export class wpIntegrationService {
           photo: imageUrl,
         };
 
+        // TODO: Replace with WooCommerce media API
         const jsonResponse = await axios.post(
-          `${this.wp_BASE_URL}/products/${productId}/images`,
-          jsonPayload,
+          `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/${productId}`,
+          { images: [{ src: imageUrl }] },
           { headers },
         );
 
@@ -1433,194 +1391,85 @@ export class wpIntegrationService {
   }
 
   /**
-   * Ensures the wp access token is valid, refreshing it if necessary
+   * Validates WooCommerce API credentials
    */
-  private async ensureValidwpToken(store: wpStore): Promise<void> {
-    // Check if we have a token at all
-    if (!store.wp_access_token) {
+  private async validateWooCommerceCredentials(store: wpStore): Promise<void> {
+    // Check if we have credentials
+    if (!store.wp_consumer_key || !store.wp_consumer_secret) {
       throw new HttpException(
-        'wp access token not configured for this store',
+        'WooCommerce consumer key and secret not configured for this store',
         HttpStatus.BAD_REQUEST,
       );
     }
 
-    // Check if we have a refresh token for automatic refresh
-    if (!store.wp_refresh_token) {
-      console.log(
-        '⚠️  No refresh token available - manual token refresh required',
-      );
-    }
-
-    // Check if token is expired or will expire soon (refresh proactively)
-    const now = new Date();
-    const tokenExpiry = store.wp_token_expiry;
-    const shouldRefresh =
-      tokenExpiry &&
-      (now > tokenExpiry ||
-        tokenExpiry.getTime() - now.getTime() < 5 * 60 * 1000); // Refresh if expired or expires in 5 minutes
-
-    if (shouldRefresh && store.wp_refresh_token) {
-      console.log('🔄 Token expired or expiring soon, attempting refresh...');
-      try {
-        const refreshResult = await this.wpOAuthService.refreshToken(
-          store.wp_refresh_token,
-          this.getwpClientId(),
-          this.getwpClientSecret(),
-        );
-
-        // Calculate new expiry date
-        const newExpiry = new Date();
-        newExpiry.setSeconds(newExpiry.getSeconds() + refreshResult.expires_in);
-
-        // Update the store with new tokens
-        await this.wpStoresService.update(store.id, {
-          wp_access_token: refreshResult.access_token,
-          wp_refresh_token: refreshResult.refresh_token,
-          wp_token_expiry: newExpiry,
-        });
-
-        // Update the local store object
-        store.wp_access_token = refreshResult.access_token;
-        store.wp_refresh_token = refreshResult.refresh_token;
-        store.wp_token_expiry = newExpiry;
-
-        console.log('✅ Token refreshed successfully');
-      } catch (error) {
-        console.error('❌ Token refresh failed:', error.message);
-        throw new HttpException(
-          'Failed to refresh wp access token. Please re-authenticate.',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-    }
-
-    // Test the token by making a simple API call
+    // Test the credentials by making a simple API call
     try {
+      const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
       const testHeaders = {
-        Authorization: `Bearer ${store.wp_access_token}`,
+        Authorization: `Basic ${auth}`,
         Accept: 'application/json',
       };
 
-      console.log('🔍 Validating wp token...');
-      await axios.get(`${this.wp_BASE_URL}/store/info`, {
+      console.log('🔍 Validating WooCommerce credentials...');
+      await axios.get(`${store.wp_store_url}/wp-json/wc/v3/system_status`, {
         headers: testHeaders,
         timeout: 10000,
       });
-      console.log('✅ wp token is valid');
+      console.log('✅ WooCommerce credentials are valid');
     } catch (error) {
       console.error(
-        '❌ wp token validation failed:',
+        '❌ WooCommerce credentials validation failed:',
         error.response?.status,
         error.response?.data,
       );
 
-      if (error.response?.status === 401) {
-        // Try to refresh token one more time if we have a refresh token
-        if (store.wp_refresh_token && !shouldRefresh) {
-          console.log('🔄 Token invalid, attempting refresh...');
-          try {
-            const refreshResult = await this.wpOAuthService.refreshToken(
-              store.wp_refresh_token,
-              this.getwpClientId(),
-              this.getwpClientSecret(),
-            );
-
-            // Calculate new expiry date
-            const newExpiry = new Date();
-            newExpiry.setSeconds(
-              newExpiry.getSeconds() + refreshResult.expires_in,
-            );
-
-            // Update the store with new tokens
-            await this.wpStoresService.update(store.id, {
-              wp_access_token: refreshResult.access_token,
-              wp_refresh_token: refreshResult.refresh_token,
-              wp_token_expiry: newExpiry,
-            });
-
-            // Update the local store object
-            store.wp_access_token = refreshResult.access_token;
-            store.wp_refresh_token = refreshResult.refresh_token;
-            store.wp_token_expiry = newExpiry;
-
-            console.log(
-              '✅ Token refreshed successfully after validation failure',
-            );
-
-            // Test the new token
-            const newHeaders = {
-              Authorization: `Bearer ${store.wp_access_token}`,
-              Accept: 'application/json',
-            };
-
-            await axios.get(`${this.wp_BASE_URL}/store/info`, {
-              headers: newHeaders,
-              timeout: 10000,
-            });
-            console.log('✅ New token validated successfully');
-          } catch (refreshError) {
-            console.error(
-              '❌ Token refresh after validation failure also failed:',
-              refreshError.message,
-            );
-            throw new HttpException(
-              'wp access token is invalid and refresh failed. Please re-authenticate.',
-              HttpStatus.UNAUTHORIZED,
-            );
-          }
-        } else {
-          throw new HttpException(
-            'wp access token is invalid or expired. Please re-authenticate.',
-            HttpStatus.UNAUTHORIZED,
-          );
-        }
-      } else if (error.response?.status === 403) {
-        throw new HttpException(
-          'Insufficient permissions for wp API. Please check token scopes.',
-          HttpStatus.FORBIDDEN,
-        );
-      } else {
-        throw new HttpException(
-          `Failed to connect to wp API: ${error.message}`,
-          HttpStatus.BAD_GATEWAY,
-        );
-      }
+      throw new HttpException(
+        'Invalid WooCommerce credentials. Please check consumer key and secret.',
+        HttpStatus.UNAUTHORIZED,
+      );
     }
   }
 
   /**
-   * Get store information including currency
+   * Get store information including currency from WooCommerce
    */
   private async getStoreInfo(
     store: wpStore,
   ): Promise<{ currency: string; country_code: string }> {
+    const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
     const headers = {
-      Authorization: `Bearer ${store.wp_access_token}`,
+      Authorization: `Basic ${auth}`,
       'Content-Type': 'application/json',
     };
 
     try {
-      console.log('🏪 Fetching store information and currency...');
-      const response = await axios.get(`${this.wp_BASE_URL}/store/info`, {
+      console.log('🏪 Fetching WooCommerce store information and currency...');
+      const response = await axios.get(`${store.wp_store_url}/wp-json/wc/v3/settings/general`, {
         headers,
       });
 
-      const storeInfo = response.data.data;
-      console.log(`💰 Store Currency: ${storeInfo.currency}`);
-      console.log(`🌍 Store Country: ${storeInfo.country_code}`);
+      // Find currency setting in WooCommerce general settings
+      const currencySetting = response.data.find((setting: any) => setting.id === 'woocommerce_currency');
+      const countrySetting = response.data.find((setting: any) => setting.id === 'woocommerce_default_country');
+
+      const currency = currencySetting?.value || 'USD';
+      const countryCode = countrySetting?.value?.split(':')[0] || 'US'; // Country format is usually "US:CA" for US/California
+
+      console.log(`💰 Store Currency: ${currency}`);
+      console.log(`🌍 Store Country: ${countryCode}`);
 
       return {
-        currency: storeInfo.currency,
-        country_code: storeInfo.country_code,
+        currency: currency,
+        country_code: countryCode,
       };
     } catch (error) {
       console.warn(
-        '⚠️  Could not fetch store info, using defaults:',
+        '⚠️  Could not fetch WooCommerce store info, using defaults:',
         error.message,
       );
       return {
-        currency: 'SAR', // Default to Saudi Riyal
-        country_code: 'SA',
+        currency: 'USD', // Default to USD for WooCommerce
+        country_code: 'US',
       };
     }
   }
@@ -1684,13 +1533,14 @@ export class wpIntegrationService {
           continue;
         }
 
-        // Try to fetch the product from wp
+        // Try to fetch the product from WooCommerce
+        const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
         const response = await fetch(
-          `${process.env.wp_BASE_URL || 'https://api.wp.dev/admin/v2'}/products/${syncedOption.wp_product_id}`,
+          `${store.wp_store_url}/wp-json/wc/v3/products/${syncedOption.wp_product_id}`,
           {
             method: 'GET',
             headers: {
-              Authorization: `Bearer ${store.wp_access_token}`,
+              Authorization: `Basic ${auth}`,
               Accept: 'application/json',
               'Content-Type': 'application/json',
             },
@@ -1756,11 +1606,10 @@ export class wpIntegrationService {
   }
 
   /**
-   * Force re-authorization by clearing tokens and generating new auth URL
-   * Use this when both access token and refresh token are invalid
+   * Clear WooCommerce credentials (for testing/reset purposes)
+   * Use this when WooCommerce credentials need to be reset
    */
-  async forceReauthorization(storeId: string): Promise<{
-    authUrl: string;
+  async clearWooCommerceCredentials(storeId: string): Promise<{
     message: string;
   }> {
     try {
@@ -1771,29 +1620,20 @@ export class wpIntegrationService {
         throw new Error('Store not found');
       }
 
-      // Clear the invalid tokens
+      // Clear the WooCommerce credentials
       await this.wpStoresService.update(store.id, {
-        wp_access_token: undefined,
-        wp_refresh_token: undefined,
-        wp_token_expiry: undefined,
+        wp_consumer_key: '',
+        wp_consumer_secret: '',
       });
 
-      // Generate new authorization URL using environment credentials
-      const authUrl = this.wpOAuthService.generateAuthUrl(
-        this.getwpClientId(),
-        `store-${store.id}`
-      );
-
-      console.log(`🔄 Force re-authorization initiated for store: ${store.wp_store_name}`);
-      console.log(`🔗 Authorization URL: ${authUrl}`);
+      console.log(`🔄 WooCommerce credentials cleared for store: ${store.wp_store_name}`);
 
       return {
-        authUrl,
-        message: `Tokens cleared. Please visit the authorization URL to re-authorize the store: ${store.wp_store_name}`
+        message: `WooCommerce credentials cleared for store: ${store.wp_store_name}. Please update with new consumer key and secret.`
       };
     } catch (error) {
-      console.error('❌ Force re-authorization failed:', error.message);
-      throw new Error(`Failed to initiate re-authorization: ${error.message}`);
+      console.error('❌ Failed to clear WooCommerce credentials:', error.message);
+      throw new Error(`Failed to clear credentials: ${error.message}`);
     }
   }
 }

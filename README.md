@@ -75,7 +75,7 @@ This NestJS-based web application serves as a secure bridge between wp e-commerc
 
 ### Technology Stack
 - **Framework**: NestJS with TypeScript for robust backend architecture
-- **Database**: PostgreSQL with TypeORM for reliable data persistence
+- **Database**: MySQL with TypeORM for reliable data persistence
 - **Authentication**: JWT-based authentication with Passport.js
 - **Security**: AES-256-GCM encryption for sensitive data
 - **Frontend**: Server-side rendered EJS templates with modern CSS/JavaScript
@@ -142,7 +142,7 @@ Stock Updates → Invoice Generation → Audit Logging
 
 ### Prerequisites
 - **Node.js** (v18 or higher)
-- **PostgreSQL** (v13 or higher) or **MySQL** (v8 or higher)
+- **MySQL** (v8 or higher) - Primary database (PostgreSQL support removed)
 - **wp Partner Account** with app credentials
 - **Ubiqfy API credentials** (username, password, terminal key)
 - **SSL Certificate** (required for production webhook handling)
@@ -414,7 +414,7 @@ npm run test -- --testNamePattern="WebhookSignature"
 #### Prerequisites
 - **SSL Certificate**: Required for webhook HTTPS endpoints
 - **Domain Setup**: Configured domain with DNS pointing to your server
-- **Database**: Production PostgreSQL instance with SSL
+- **Database**: Production MySQL instance with SSL
 - **Environment**: Production environment variables configured
 
 #### Deployment Steps
@@ -470,10 +470,10 @@ docker-compose up -d
 ```
 
 ### Cloud Deployment Options
-- **AWS**: ECS, Elastic Beanstalk, or EC2 with RDS PostgreSQL
-- **Google Cloud**: Cloud Run with Cloud SQL
-- **Azure**: Container Instances with Azure Database for PostgreSQL
-- **Heroku**: Direct deployment with Heroku Postgres addon
+- **AWS**: ECS, Elastic Beanstalk, or EC2 with RDS MySQL
+- **Google Cloud**: Cloud Run with Cloud SQL MySQL
+- **Azure**: Container Instances with Azure Database for MySQL
+- **Digital Ocean**: App Platform with Managed MySQL Database
 
 ## 🔒 Security Considerations
 
@@ -696,7 +696,7 @@ For enterprise customers, we offer:
 ### Open Source Technologies
 - **[NestJS](https://nestjs.com/)** - Progressive Node.js framework for scalable server-side applications
 - **[TypeORM](https://typeorm.io/)** - Feature-rich ORM for TypeScript and JavaScript
-- **[PostgreSQL](https://postgresql.org/)** - Advanced open source relational database
+- **[MySQL](https://mysql.com/)** - Popular open source relational database
 - **[Bootstrap](https://getbootstrap.com/)** - Popular CSS framework for responsive design
 
 ### API Partners
