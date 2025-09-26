@@ -8,15 +8,24 @@ let storeId, conversionRate, wpCurrency, ubiqfyCurrency;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', function () {
-    // Initialize store data if available
-    if (window.storeData) {
-        initializeStoreData(window.storeData);
-    }
-
     // Initialize option checkbox visual states
     initializeOptionCheckboxStates();
 
     console.log('Sync page loaded, store data:', window.storeData);
+});
+
+// Listen for store data ready event
+document.addEventListener('storeDataReady', function (event) {
+    const storeData = event.detail;
+    console.log('Store data received:', storeData);
+
+    // Initialize global variables
+    storeId = storeData.id;
+    conversionRate = storeData.currency_conversion_rate;
+    wpCurrency = storeData.wp_currency;
+    ubiqfyCurrency = storeData.ubiqfy_currency;
+
+    console.log('Store variables initialized:', { storeId, conversionRate, wpCurrency, ubiqfyCurrency });
 });
 
 /**
@@ -571,26 +580,6 @@ function populateCountryFilter(countries) {
         document.getElementById('filteredProductCount').textContent = visibleProducts;
         console.log(`Initial visible products: ${visibleProducts}`);
     }, 100);
-}
-
-/**
- * Toggle all products selection
- */
-function toggleAllProducts() {
-    const masterCheckbox = document.getElementById('selectAllProductsCheckbox');
-    const productCheckboxes = document.querySelectorAll('.product-checkbox');
-
-    // Use the toggleAllProducts function from product-sync.js if available
-    if (typeof window.toggleAllProducts === 'function') {
-        window.toggleAllProducts();
-    } else {
-        productCheckboxes.forEach(checkbox => {
-            checkbox.checked = masterCheckbox.checked;
-            // Trigger the change event to update pricing
-            checkbox.dispatchEvent(new Event('change'));
-        });
-        updateSelectedCountWrapper();
-    }
 }
 
 /**

@@ -15,7 +15,7 @@ export interface wpCategory {
   slug: string;
   status: string;
   image?: string;
-  parent_id?: number;
+  parent?: number; // WooCommerce uses 'parent', not 'parent_id'
 }
 
 export interface wpProduct {
@@ -181,7 +181,7 @@ export class wpIntegrationService {
         },
       );
 
-      const existingProducts = existingProductsResponse.data.data || [];
+      const existingProducts = existingProductsResponse.data || [];
       console.log(`Raw response has ${existingProducts.length} products`);
 
       existingProducts.forEach((product) => {
@@ -235,8 +235,8 @@ export class wpIntegrationService {
 
       // Pre-populate cache with existing subcategories
       existingwpCategories.forEach((category) => {
-        if (category.parent_id) {
-          const cacheKey = `${category.parent_id}-${category.name}`;
+        if (category.parent) {
+          const cacheKey = `${category.parent}-${category.name}`;
           countrySubcategoriesCache.set(cacheKey, category);
           console.log(
             `📋 Pre-cached existing subcategory: ${cacheKey} (ID: ${category.id})`,
@@ -375,7 +375,7 @@ export class wpIntegrationService {
                 store,
                 {
                   name: `${ubiqfyProduct.country_iso}`,
-                  parent_id: parseInt(mainCategoryId),
+                  parent: parseInt(mainCategoryId),
                   description: `Products for ${ubiqfyProduct.country_iso}`,
                 },
                 countrySubcategoriesCache,
@@ -533,8 +533,8 @@ export class wpIntegrationService {
     }
 
     // Summary logging
-    const newMainCategories = results.categories.filter((c) => !c.parent_id);
-    const newSubcategories = results.categories.filter((c) => c.parent_id);
+    const newMainCategories = results.categories.filter((c) => !c.parent);
+    const newSubcategories = results.categories.filter((c) => c.parent);
     const totalSubcategoriesUsed = countrySubcategoriesCache.size;
     const reusedSubcategories =
       totalSubcategoriesUsed - newSubcategories.length;
@@ -567,19 +567,19 @@ export class wpIntegrationService {
       name: string;
       image?: string;
       description?: string;
-      parent_id?: number;
+      parent?: number; // Changed from parent_id to parent
     },
     cache?: Map<string, wpCategory>,
   ): Promise<wpCategory> {
     const headers = this.getWooCommerceHeaders(store);
 
     // First, check the cache if provided (for subcategories)
-    if (cache && categoryData.parent_id) {
-      const cacheKey = `${categoryData.parent_id}-${categoryData.name}`;
+    if (cache && categoryData.parent) {
+      const cacheKey = `${categoryData.parent}-${categoryData.name}`;
       const cachedCategory = cache.get(cacheKey);
       if (cachedCategory) {
         console.log(
-          `✅ Using cached category: ID ${cachedCategory.id}, Name: "${cachedCategory.name}", Parent: ${cachedCategory.parent_id || 'none'}`,
+          `✅ Using cached category: ID ${cachedCategory.id}, Name: "${cachedCategory.name}", Parent: ${cachedCategory.parent || 'none'}`,
         );
         return cachedCategory;
       }
@@ -588,7 +588,7 @@ export class wpIntegrationService {
     // Second, check if category already exists via API
     try {
       console.log(
-        `🔍 Searching for existing category: "${categoryData.name}" with parent_id: ${categoryData.parent_id || 'none'}`,
+        `🔍 Searching for existing category: "${categoryData.name}" with parent: ${categoryData.parent || 'none'}`,
       );
       const existingResponse = await axios.get(
         `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/categories`,
@@ -598,26 +598,28 @@ export class wpIntegrationService {
         },
       );
 
-      if (existingResponse.data.data && existingResponse.data.data.length > 0) {
+      // WooCommerce returns array directly, not wrapped in data
+      const existingCategories = existingResponse.data || [];
+      if (existingCategories.length > 0) {
         console.log(
-          `📋 Found ${existingResponse.data.data.length} categories with name "${categoryData.name}"`,
+          `📋 Found ${existingCategories.length} categories with name "${categoryData.name}"`,
         );
-        // For subcategories, also check parent_id matches
-        const existing = existingResponse.data.data.find(
+        // For subcategories, also check parent matches
+        const existing = existingCategories.find(
           (cat) =>
             cat.name === categoryData.name &&
-            (categoryData.parent_id
-              ? cat.parent_id === categoryData.parent_id
-              : !cat.parent_id),
+            (categoryData.parent
+              ? cat.parent === categoryData.parent
+              : !cat.parent),
         );
         if (existing) {
           console.log(
-            `✅ Using existing category: ID ${existing.id}, Name: "${existing.name}", Parent: ${existing.parent_id || 'none'}`,
+            `✅ Using existing category: ID ${existing.id}, Name: "${existing.name}", Parent: ${existing.parent || 'none'}`,
           );
 
           // Cache it for future use if cache is provided
-          if (cache && categoryData.parent_id) {
-            const cacheKey = `${categoryData.parent_id}-${categoryData.name}`;
+          if (cache && categoryData.parent) {
+            const cacheKey = `${categoryData.parent}-${categoryData.name}`;
             cache.set(cacheKey, existing);
             console.log(
               `📋 Cached existing category for future use: ${cacheKey}`,
@@ -627,7 +629,7 @@ export class wpIntegrationService {
           return existing;
         } else {
           console.log(
-            `⚠️  Found categories with same name but different parent_id. Looking for parent_id: ${categoryData.parent_id}`,
+            `⚠️  Found categories with same name but different parent. Looking for parent: ${categoryData.parent}`,
           );
         }
       } else {
@@ -639,19 +641,15 @@ export class wpIntegrationService {
       console.log('Error checking existing categories:', error.message);
     }
 
-    // Create new category - NOTE: wp requires images to be uploaded via their media API
-    // External URLs are not supported, so temporarily creating without images
+    // Create new category using WooCommerce REST API format
     const categoryPayload: any = {
       name: categoryData.name,
       description: categoryData.description || categoryData.name,
-      // TODO: Implement proper image upload via /admin/v2/media endpoint
-      // ...(categoryData.image && { image: categoryData.image })
+      // WooCommerce uses 'parent' instead of 'parent_id'
+      ...(categoryData.parent && { parent: categoryData.parent }),
+      // Image can be added later via WooCommerce media API
+      // ...(categoryData.image && { image: { src: categoryData.image } })
     };
-
-    // Add parent_id if provided (for subcategories)
-    if (categoryData.parent_id) {
-      categoryPayload.parent_id = categoryData.parent_id;
-    }
 
     try {
       console.log(
@@ -672,22 +670,23 @@ export class wpIntegrationService {
           timeout: 15000,
         },
       );
-      console.log('✅ wp category created successfully:', {
-        id: response.data.data.id,
-        name: response.data.data.name,
-        status: response.data.data.status,
+      console.log('✅ WooCommerce category created successfully:', {
+        id: response.data.id,
+        name: response.data.name,
+        slug: response.data.slug,
+        parent: response.data.parent,
       });
 
       // Cache the newly created category if cache is provided and it's a subcategory
-      if (cache && categoryData.parent_id) {
-        const cacheKey = `${categoryData.parent_id}-${categoryData.name}`;
-        cache.set(cacheKey, response.data.data);
+      if (cache && categoryData.parent) {
+        const cacheKey = `${categoryData.parent}-${categoryData.name}`;
+        cache.set(cacheKey, response.data);
         console.log(
           `📋 Cached newly created category for future use: ${cacheKey}`,
         );
       }
 
-      return response.data.data;
+      return response.data;
     } catch (error) {
       console.error('wp category creation error:', {
         status: error.response?.status,
@@ -806,15 +805,33 @@ export class wpIntegrationService {
       ? `${option.name} (${storeProduct.ubiqfyProduct.country_iso})`
       : option.name;
 
-    // Create product without image first, then attach image separately
+    // Create product payload using WooCommerce REST API format
     const productPayload = {
       name: productName,
       description: option.description || `${option.name} - Digital Gift Card`,
-      price: finalPrice,
-      cost_price: costPrice,
+      short_description: `${option.name} - Digital Gift Card`,
+      regular_price: finalPrice.toString(),
       sku: `${store.sku_prefix || 'UBQ'}-${option.product_option_code}`, // Add store's custom prefix
-      categories: [categoryId], // Use categories array instead of category_id for proper linking
-      product_type: 'codes',
+      categories: [{ id: categoryId }], // WooCommerce expects array of objects with id
+      type: 'simple', // WooCommerce product type
+      status: 'publish', // Make product active
+      virtual: true, // Digital product
+      downloadable: false, // Will be managed by WC Key Manager
+      manage_stock: true, // Enable stock management
+      stock_quantity: 0, // Stock will be managed based on available codes by plugin
+      in_stock: false, // Will be updated by plugin based on code availability
+      stock_status: 'outofstock', // Will be managed by plugin based on available codes
+      // Add meta data for cost price tracking
+      meta_data: [
+        {
+          key: '_cost_price',
+          value: costPrice.toString()
+        },
+        {
+          key: '_ubiqfy_option_code',
+          value: option.product_option_code
+        }
+      ]
     };
 
     if (productLogo) {
@@ -862,7 +879,8 @@ export class wpIntegrationService {
           },
         );
 
-        const existingProducts = existingProductsResponse.data.data || [];
+        // WooCommerce returns products directly as array
+        const existingProducts = existingProductsResponse.data || [];
         existingProduct =
           existingProducts.find((p) => p.sku === prefixedSku) ||
           null;
@@ -877,10 +895,16 @@ export class wpIntegrationService {
       console.log('📝 Updating existing product:', existingProduct.name);
       console.log('Current product categories:', existingProduct.categories);
 
-      // For existing products, only update pricing to preserve manual customizations
+      // For existing products, only update pricing to preserve all other settings (stock, categories, etc.)
       const updatePayload = {
-        price: finalPrice,
-        cost_price: costPrice,
+        regular_price: finalPrice.toString(),
+        // Update cost price in meta data
+        meta_data: [
+          {
+            key: '_cost_price',
+            value: costPrice.toString()
+          }
+        ]
       };
 
       console.log('📝 Updating only pricing data:', updatePayload);
@@ -893,21 +917,21 @@ export class wpIntegrationService {
         );
         console.log('✅ Product pricing updated successfully');
         console.log('Preserved product info:', {
-          name: updateResponse.data.data.name,
-          description: updateResponse.data.data.description,
-          categories: updateResponse.data.data.categories || [],
+          name: updateResponse.data.name,
+          description: updateResponse.data.description,
+          categories: updateResponse.data.categories || [],
         });
 
         // Attach image after successful update
         if (productLogo) {
           await this.attachImageToProduct(
             store,
-            updateResponse.data.data.id,
+            updateResponse.data.id,
             productLogo,
           );
         }
 
-        return updateResponse.data.data;
+        return updateResponse.data;
       } catch (error) {
         console.error(
           'Failed to update product, will try to create new one:',
@@ -918,7 +942,7 @@ export class wpIntegrationService {
     }
 
     try {
-      console.log('Creating new wp product:', productPayload);
+      console.log('Creating new WooCommerce product:', productPayload);
       const response = await axios.post(
         `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products`,
         productPayload,
@@ -926,20 +950,20 @@ export class wpIntegrationService {
       );
       console.log('✅ New product created successfully');
       console.log('Created product category info:', {
-        category_id: response.data.data.category_id || 'Not set',
-        categories: response.data.data.categories || [],
+        product_id: response.data.id,
+        categories: response.data.categories || [],
       });
 
       // Attach image after successful creation
       if (productLogo) {
         await this.attachImageToProduct(
           store,
-          response.data.data.id,
+          response.data.id,
           productLogo,
         );
       }
 
-      return response.data.data;
+      return response.data;
     } catch (error) {
       console.error(
         'wp product creation error:',
@@ -993,14 +1017,15 @@ export class wpIntegrationService {
           },
         });
 
-        const categories = response.data.data || [];
-        const pagination = response.data.pagination || {};
+        // WooCommerce returns categories directly as array
+        const categories = response.data || [];
 
         console.log(`📄 Page ${page}: Found ${categories.length} categories`);
         allCategories.push(...categories);
 
-        // Check if there are more pages
-        hasMore = pagination.current_page < pagination.last_page;
+        // WooCommerce pagination info is in response headers
+        const totalPages = parseInt(response.headers['x-wp-totalpages'] || '1');
+        hasMore = page < totalPages;
         page++;
 
         // Safety check to prevent infinite loops
@@ -1015,11 +1040,11 @@ export class wpIntegrationService {
       console.log(`📋 Total categories fetched: ${allCategories.length}`);
 
       // Log subcategories for debugging
-      const subcategories = allCategories.filter((cat) => cat.parent_id);
+      const subcategories = allCategories.filter((cat) => cat.parent);
       console.log(`📂 Found ${subcategories.length} subcategories:`);
       subcategories.forEach((sub) => {
         console.log(
-          `   • ${sub.name} (ID: ${sub.id}, Parent: ${sub.parent_id})`,
+          `   • ${sub.name} (ID: ${sub.id}, Parent: ${sub.parent})`,
         );
       });
 
@@ -1050,7 +1075,7 @@ export class wpIntegrationService {
       const response = await axios.get(`${store.wp_store_url}/wp-json/wc/v3/products`, {
         headers,
       });
-      return response.data.data || [];
+      return response.data || [];
     } catch (error) {
       console.error(
         'Error fetching wp products:',
@@ -1096,7 +1121,7 @@ export class wpIntegrationService {
 
       return {
         connected: true,
-        storeInfo: response.data.data,
+        storeInfo: response.data,
       };
     } catch (error) {
       console.error('wp connection test failed:', {
@@ -1213,18 +1238,18 @@ export class wpIntegrationService {
       // Check if the product already has any images
       try {
         console.log(`🔍 Checking existing images for product ${productId}...`);
-        // TODO: Update to use WooCommerce media API endpoints
+        // WooCommerce product endpoint to get current product data
         const productResponse = await axios.get(
           `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/${productId}`,
           { headers },
         );
-        const existingImages = productResponse.data.data?.images || [];
+        const existingImages = productResponse.data.images || [];
 
         console.log(`📊 Image check results for product ${productId}:`, {
           totalImages: existingImages.length,
           imageDetails: existingImages.map(img => ({
             id: img.id,
-            url: img.url || img.image?.original?.url,
+            src: img.src,
             alt: img.alt
           }))
         });
@@ -1236,7 +1261,7 @@ export class wpIntegrationService {
           console.log(
             `Existing images:`,
             existingImages
-              .map((img) => img.url || img.image?.original?.url)
+              .map((img) => img.src)
               .filter(Boolean),
           );
           return;
@@ -1282,11 +1307,13 @@ export class wpIntegrationService {
         const FormData = require('form-data');
         const formData = new FormData();
 
-        // Try the correct field name for wp API
+        // Try the correct field name for WooCommerce API
         formData.append('photo', imageBuffer, {
           filename: `product_${productId}${fileExtension}`,
           contentType: contentType,
-        }); const formHeaders = {
+        });
+
+        const formHeaders = {
           ...headers,
           ...formData.getHeaders(),
         };
@@ -1303,8 +1330,8 @@ export class wpIntegrationService {
 
         console.log(`✅ Image uploaded successfully to product ${productId}`);
         console.log(`Image details:`, {
-          id: uploadResponse.data.data?.id,
-          url: uploadResponse.data.data?.image?.original?.url,
+          id: uploadResponse.data?.id,
+          url: uploadResponse.data?.images?.[0]?.src,
         });
 
         return;
@@ -1320,7 +1347,9 @@ export class wpIntegrationService {
         const formData = new FormData();
 
         // Try the correct field name based on the error message
-        formData.append('photo', imageUrl); const formHeaders = {
+        formData.append('photo', imageUrl);
+
+        const formHeaders = {
           ...headers,
           ...formData.getHeaders(),
         };
@@ -1336,8 +1365,8 @@ export class wpIntegrationService {
 
         console.log(`✅ Image URL attached successfully to product ${productId}`);
         console.log(`Image details:`, {
-          id: urlResponse.data.data?.id,
-          url: urlResponse.data.data?.image?.original?.url,
+          id: urlResponse.data?.id,
+          url: urlResponse.data?.images?.[0]?.src,
         });
 
         return;
@@ -1361,8 +1390,8 @@ export class wpIntegrationService {
 
         console.log(`✅ Image JSON payload attached successfully to product ${productId}`);
         console.log(`Image details:`, {
-          id: jsonResponse.data.data?.id,
-          url: jsonResponse.data.data?.image?.original?.url,
+          id: jsonResponse.data?.id,
+          url: jsonResponse.data?.images?.[0]?.src,
         });
 
       } catch (jsonError) {

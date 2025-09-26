@@ -487,4 +487,20 @@ export class wpStoreProductOptionsService {
 
     return savedOption;
   }
+
+  /**
+   * Find an option by option code for a specific store
+   */
+  async findByOptionCode(
+    storeId: string,
+    optionCode: string,
+  ): Promise<wpStoreProductOption | null> {
+    return await this.optionRepository
+      .createQueryBuilder('option')
+      .leftJoinAndSelect('option.storeProduct', 'storeProduct')
+      .leftJoinAndSelect('storeProduct.wpStore', 'wpStore')
+      .where('wpStore.id = :storeId', { storeId })
+      .andWhere('option.option_code = :optionCode', { optionCode })
+      .getOne();
+  }
 }

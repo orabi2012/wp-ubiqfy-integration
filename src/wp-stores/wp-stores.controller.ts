@@ -658,4 +658,172 @@ export class wpStoresController {
       );
     }
   }
+
+  /**
+   * Create a new product option with custom pricing
+   * This handles cases where the option doesn't exist in DB yet
+   */
+  @Post(':id/create-option')
+  @UseGuards(StoreAccessGuard)
+  async createProductOption(
+    @Param('id') storeId: string,
+    @Body() createOptionDto: {
+      optionCode: string;
+      customPrice?: number;
+      markupPercentage?: number;
+    }
+  ) {
+    this.validateUUID(storeId);
+
+    try {
+      const { optionCode, customPrice, markupPercentage } = createOptionDto;
+
+      if (!optionCode) {
+        throw new HttpException(
+          'Option code is required',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Find existing option first
+      const existingOption = await this.storeProductOptionsService.findByOptionCode(
+        storeId,
+        optionCode
+      );
+
+      if (existingOption) {
+        // Option exists, update it instead
+        let updatedOption = existingOption;
+
+        if (customPrice !== undefined && customPrice !== null) {
+          updatedOption = await this.storeProductOptionsService.updateCustomPriceAndCalculateMarkup(
+            existingOption.id,
+            customPrice
+          );
+        } else if (markupPercentage !== undefined && markupPercentage !== null) {
+          updatedOption = await this.storeProductOptionsService.updateMarkupAndCalculateCustomPrice(
+            existingOption.id,
+            markupPercentage
+          );
+        }
+
+        return {
+          success: true,
+          message: 'Option updated successfully',
+          data: {
+            optionId: updatedOption.id,
+            optionCode: updatedOption.option_code,
+            customPrice: updatedOption.custom_price,
+            markupPercentage: updatedOption.markup_percentage,
+          },
+        };
+      }
+
+      // Option doesn't exist - this means the option hasn't been synced from Ubiqfy yet
+      // We can't create it without the full Ubiqfy data
+      throw new HttpException(
+        'Option not found in database. Please fetch products from Ubiqfy first to sync this option.',
+        HttpStatus.NOT_FOUND,
+      );
+
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        `Failed to create/update option: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Update custom price for an existing option (simpler endpoint for frontend)
+   */
+  @Post(':id/update-option-custom-price')
+  @UseGuards(StoreAccessGuard)
+  async updateOptionCustomPriceSimple(
+    @Param('id') storeId: string,
+    @Body() updateDto: { optionId: string; customPrice: number }
+  ) {
+    this.validateUUID(storeId);
+
+    try {
+      const { optionId, customPrice } = updateDto;
+
+      if (!optionId || customPrice == null) {
+        throw new HttpException(
+          'Option ID and custom price are required',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      this.validateUUID(optionId);
+
+      const updatedOption = await this.storeProductOptionsService.updateCustomPriceAndCalculateMarkup(
+        optionId,
+        customPrice
+      );
+
+      return {
+        success: true,
+        message: 'Custom price updated successfully',
+        data: {
+          optionId: updatedOption.id,
+          customPrice: updatedOption.custom_price,
+          markupPercentage: updatedOption.markup_percentage,
+        },
+      };
+    } catch (error) {
+      throw new HttpException(
+        `Failed to update custom price: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
+   * Update markup percentage for an existing option (simpler endpoint for frontend)
+   */
+  @Post(':id/update-option-markup')
+  @UseGuards(StoreAccessGuard)
+  async updateOptionMarkupSimple(
+    @Param('id') storeId: string,
+    @Body() updateDto: { optionId: string; markupPercentage: number }
+  ) {
+    this.validateUUID(storeId);
+
+    try {
+      const { optionId, markupPercentage } = updateDto;
+
+      if (!optionId || markupPercentage == null) {
+        throw new HttpException(
+          'Option ID and markup percentage are required',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      this.validateUUID(optionId);
+
+      const updatedOption = await this.storeProductOptionsService.updateMarkupAndCalculateCustomPrice(
+        optionId,
+        markupPercentage
+      );
+
+      return {
+        success: true,
+        message: 'Markup percentage updated successfully',
+        data: {
+          optionId: updatedOption.id,
+          customPrice: updatedOption.custom_price,
+          markupPercentage: updatedOption.markup_percentage,
+        },
+      };
+    } catch (error) {
+      throw new HttpException(
+        `Failed to update markup percentage: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }

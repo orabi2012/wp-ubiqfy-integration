@@ -55,8 +55,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
                     timezone: '+03:00', // KSA timezone (UTC+3) for MySQL
                     extra: {
                         connectionLimit: 10,
-                        acquireTimeout: 60000,
-                        timeout: 60000,
+                        // Use correct MySQL2 connection timeout options
+                        connectTimeout: 60000,
+                        idleTimeout: 600000,
                         // Set MySQL timezone for this connection
                         timezone: '+03:00',
                     }
