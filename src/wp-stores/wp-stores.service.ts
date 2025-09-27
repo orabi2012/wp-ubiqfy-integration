@@ -458,25 +458,23 @@ export class wpStoresService {
       // Get product data from WooCommerce using the correct product ID from database
       const productData = await this.getwpProductStock(store, actualwpProductId);
 
-      // Find the matching SKU in the product data
+      // Extract stock quantity from WooCommerce product data
       let stockQuantity: number | null = null;
 
-      if (productData.skus && Array.isArray(productData.skus)) {
-        // Look for the specific SKU that matches our option
-        const matchingSku = productData.skus.find(sku =>
-          sku.sku === option.option_code
-        );
-
-        if (matchingSku) {
-          stockQuantity = matchingSku.unlimited_quantity ? 999999 : (matchingSku.stock_quantity || 0);
-        } else {
-          // If no specific SKU found, use the main product quantity
-          stockQuantity = productData.quantity || 0;
-        }
+      // WooCommerce API returns stock_quantity directly in the product object
+      if (productData.manage_stock) {
+        stockQuantity = productData.stock_quantity || 0;
       } else {
-        // For simple products without SKUs
-        stockQuantity = productData.quantity || 0;
+        // If stock management is disabled, consider it as unlimited/in stock
+        stockQuantity = productData.stock_status === 'instock' ? 999999 : 0;
       }
+
+      console.log(`WooCommerce stock data for product ${actualwpProductId}:`, {
+        manage_stock: productData.manage_stock,
+        stock_quantity: productData.stock_quantity,
+        stock_status: productData.stock_status,
+        calculated_stock: stockQuantity
+      });
 
       // Update the database
       await this.wpStoreProductOptionRepo.update(
