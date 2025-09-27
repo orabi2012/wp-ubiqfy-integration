@@ -821,7 +821,7 @@ export class wpIntegrationService {
       stock_quantity: 0, // Stock will be managed based on available codes by plugin
       in_stock: false, // Will be updated by plugin based on code availability
       stock_status: 'outofstock', // Will be managed by plugin based on available codes
-      // Add meta data for cost price tracking
+      // Add meta data for cost price tracking and WC Key Manager integration
       meta_data: [
         {
           key: '_cost_price',
@@ -830,6 +830,10 @@ export class wpIntegrationService {
         {
           key: '_ubiqfy_option_code',
           value: option.product_option_code
+        },
+        {
+          key: '_wckm_key_source',
+          value: 'preset'
         }
       ]
     };
