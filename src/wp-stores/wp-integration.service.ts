@@ -1123,9 +1123,31 @@ export class wpIntegrationService {
         timeout: 10000,
       });
 
+      // Extract store name from environment.home_url in system_status response
+      let storeName = 'Unknown Store';
+      try {
+        const homeUrl = response.data?.environment?.home_url;
+        if (homeUrl) {
+          const url = new URL(homeUrl);
+          storeName = url.hostname.replace('www.', '');
+        }
+      } catch (error) {
+        console.warn('Could not extract store name from environment.home_url:', error.message);
+        // Fallback: extract domain name from store URL
+        try {
+          const url = new URL(store.wp_store_url);
+          storeName = url.hostname.replace('www.', '');
+        } catch (urlError) {
+          storeName = 'Unknown Store';
+        }
+      }
+
       return {
         connected: true,
-        storeInfo: response.data,
+        storeInfo: {
+          ...response.data,
+          name: storeName,
+        },
       };
     } catch (error) {
       console.error('wp connection test failed:', {
