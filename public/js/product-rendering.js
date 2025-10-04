@@ -414,7 +414,7 @@ function createImageElement(imageUrl, altText, index) {
     return `<img src="${imageUrl}" 
                  alt="${altText}" 
                  class="img-thumbnail product-image" 
-                 style="max-width: 60px; max-height: 40px; opacity: 0.8;" 
+                 style="max-width: 300px; max-height: 200px; opacity: 0.8;" 
                  onerror="handleImageError(this, ${index})"
                  onload="handleImageLoad(this, ${index})">`;
 }
