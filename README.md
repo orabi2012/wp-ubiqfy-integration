@@ -1,16 +1,16 @@
-# wp-Ubiqfy Integration Platform
+# WooCommerce-Ubiqfy Integration Platform
 
 <p align="center">
   <img src="public/images/ubiqfy_logo.jpg" width="200" alt="Ubiqfy Logo" />
 </p>
 
 <p align="center">
-  A comprehensive enterprise-grade integration platform connecting <strong>wp</strong> e-commerce stores with <strong>Ubiqfy</strong> voucher services, enabling merchants to sell digital vouchers through their online stores with advanced security and automation features.
+  A comprehensive enterprise-grade integration platform connecting <strong>WooCommerce</strong> e-commerce stores with <strong>Ubiqfy</strong> voucher services, enabling merchants to sell digital vouchers through their online stores with advanced security and automation features.
 </p>
 
 ## 🌟 Overview
 
-This NestJS-based web application serves as a secure bridge between wp e-commerce platform and Ubiqfy's voucher distribution system. It provides a complete solution for wp store owners to seamlessly integrate, manage, and sell digital vouchers from Ubiqfy's catalog directly through their stores with enterprise-level security and automation.
+This NestJS-based web application serves as a secure bridge between WooCommerce e-commerce platform and Ubiqfy's voucher distribution system. It provides a complete solution for WooCommerce store owners to seamlessly integrate, manage, and sell digital vouchers from Ubiqfy's catalog directly through their stores with enterprise-level security and automation.
 
 ## ✨ Key Features
 
@@ -21,14 +21,13 @@ This NestJS-based web application serves as a secure bridge between wp e-commerc
 - **Automatic password migration** from plain text to encrypted format
 - **Store-specific access control** with role-based permissions
 - **Secure API communications** with HTTPS enforcement
-- **Webhook signature verification** for wp events
 
-### 🏪 **Advanced wp Integration**
-- **Zero-configuration OAuth** - automatic credential management via webhooks
-- **Intelligent token management** with automatic refresh and retry logic
-- **Multi-store support** for enterprise users
-- **Real-time webhook event processing** with automatic registration
-- **Seamless app installation flow** without manual setup
+### 🏪 **Advanced WooCommerce Integration**
+- **REST API Integration** - Direct integration with WooCommerce REST API v3
+- **Intelligent authentication** with consumer key/secret management
+- **Multi-store support** for enterprise users managing multiple WooCommerce sites
+- **Real-time product synchronization** with automatic category mapping
+- **Advanced inventory management** with stock level synchronization
 
 ### 🔌 **Robust Ubiqfy Integration**
 - **Secure credential storage** with AES-256-GCM encryption
@@ -52,12 +51,12 @@ This NestJS-based web application serves as a secure bridge between wp e-commerc
 - **Comprehensive audit logging** for all transactions
 - **Failed transaction retry mechanisms** with intelligent error handling
 
-### 🌐 **Enterprise Webhook Management**
-- **Comprehensive wp webhook handling** with automatic registration
-- **Event-driven architecture** for real-time synchronization
-- **Real-time product synchronization** via webhook events
-- **Self-managing webhook subscriptions** during store authorization
-- **Error handling and retry mechanisms** for webhook failures
+### 🌐 **Enterprise Store Management**
+- **Comprehensive store configuration** with encrypted credential storage
+- **Real-time API connectivity testing** and validation
+- **Advanced product catalog synchronization** from Ubiqfy to WooCommerce
+- **Intelligent pricing management** with markup and profit calculations
+- **Automated stock level updates** between platforms
 
 ### 👥 **Advanced User Management**
 - **Role-based access control** (Superadmin/Store Users)
@@ -71,7 +70,6 @@ This NestJS-based web application serves as a secure bridge between wp e-commerc
 - **Intuitive navigation** with breadcrumb support
 - **Professional dashboards** for different user roles
 - **Mobile-optimized** interface for on-the-go management
-## 🏗 **Architecture Overview**
 
 ### Technology Stack
 - **Framework**: NestJS with TypeScript for robust backend architecture
@@ -94,7 +92,7 @@ src/
 ├── admin/           # Administrative interface and superadmin controls
 ├── auth/            # JWT authentication, guards, and security middleware
 ├── clients/         # Store management and client-facing interfaces
-├── wp-stores/    # Core wp integration with OAuth and webhooks
+├── woocommerce-stores/ # Core WooCommerce integration with REST API
 ├── store/           # Store-specific user interfaces and workflows
 ├── ubiqfy-products/ # Ubiqfy catalog management and synchronization
 ├── users/           # User management and role-based access control
@@ -105,9 +103,9 @@ src/
 ### Database Schema
 ```
 Users (JWT auth, role management)
-├── wpStores (encrypted credentials, OAuth tokens)
-│   ├── wpStoreProducts (product linking)
-│   └── wpStoreProductOptions (pricing, stock management)
+├── WooCommerceStores (encrypted credentials, API keys)
+│   ├── WooCommerceStoreProducts (product linking)
+│   └── WooCommerceStoreProductOptions (pricing, stock management)
 ├── UbiqfyProducts (catalog cache)
 │   └── UbiqfyProductOptions (variations, pricing data)
 └── VoucherPurchases (order management)
@@ -119,16 +117,15 @@ Users (JWT auth, role management)
 
 #### 1. Secure Store Setup Workflow
 ```
-App Installation → Webhook Reception → Store Record Creation →
-OAuth Token Reception → Automatic Webhook Registration →
-Encrypted Credential Setup → API Authentication Test →
-Ready for Integration
+Store Registration → WooCommerce API Credentials Setup →
+Encrypted Credential Storage → API Authentication Test →
+Ubiqfy Account Configuration → Ready for Integration
 ```
 
 #### 2. Intelligent Product Sync Workflow  
 ```
 Fetch from Ubiqfy → Apply Pricing Intelligence → Validate Categories →
-Create/Update wp Products → Update Local Cache → Stock Synchronization
+Create/Update WooCommerce Products → Update Local Cache → Stock Synchronization
 ```
 
 #### 3. Secure Purchase Workflow
@@ -142,10 +139,10 @@ Stock Updates → Invoice Generation → Audit Logging
 
 ### Prerequisites
 - **Node.js** (v18 or higher)
-- **MySQL** (v8 or higher) - Primary database (PostgreSQL support removed)
-- **wp Partner Account** with app credentials
+- **MySQL** (v8 or higher) - Primary database
+- **WooCommerce Store** with REST API access
 - **Ubiqfy API credentials** (username, password, terminal key)
-- **SSL Certificate** (required for production webhook handling)
+- **SSL Certificate** (recommended for production)
 
 ### Security Configuration
 Create a `.env` file in the root directory:
@@ -169,10 +166,8 @@ DB_SSL_ENABLED=true
 JWT_SECRET=your-super-secret-jwt-key-min-32-chars
 ENCRYPTION_KEY=your-256-bit-encryption-key-64-hex-chars
 
-# wp API Configuration (Auto-configured via webhooks)
-wp_BASE_URL=https://api.wp.dev/admin/v2
-wp_AUTH_BASE=https://accounts.wp.sa/oauth2
-wp_WEBHOOK_SECRET_KEY=your_webhook_secret
+# WooCommerce API Configuration (Manual Setup Required)
+WOOCOMMERCE_API_VERSION=v3
 
 # Ubiqfy API Configuration
 PRODUCTION_UBIQFY_URL=https://api.ubiqfy.com
@@ -181,7 +176,7 @@ SANDBOX_UBIQFY_URL=https://api-sandbox.ubiqfy.com
 
 > **🔐 Security Note**: Generate a secure 256-bit encryption key for `ENCRYPTION_KEY`. Use `openssl rand -hex 32` to generate one.
 
-> **📝 Important**: wp client credentials (ID/Secret) are **automatically obtained** during app installation via webhooks - no manual configuration required!
+> **📝 Important**: WooCommerce store credentials (Consumer Key/Secret) are manually configured per store through the admin interface for maximum security.
 
 ### Installation Steps
 
@@ -214,40 +209,42 @@ npm run start:prod
 
 ## ⚙️ Configuration
 
-### wp App Configuration
+### WooCommerce Store Configuration
 
-This integration uses **automatic webhook-based setup** with zero manual configuration!
+This integration uses **manual WooCommerce REST API setup** for maximum security and control:
 
-1. **Create wp Partner Account**: Register at [wp Partners](https://wp.partners)
+1. **Generate WooCommerce API Credentials**:
+   - Log into your WooCommerce admin dashboard
+   - Navigate to **WooCommerce > Settings > Advanced > REST API**
+   - Click **Add Key** and configure:
+     - **Description**: "Ubiqfy Integration"
+     - **User**: Select admin user
+     - **Permissions**: Read/Write
+     - **Generate API Key**
 
-2. **Create App with Webhook Configuration**:
-   - **App Type**: Private or Public App
-   - **Webhook URL**: `https://yourdomain.com/wp-webhook/handle`
-   - **Required Scopes**: 
-     - `read:products` - Read product catalog
-     - `write:products` - Create/update products
-   - **Webhook Events**: 
-     - `app.installed` - Handle app installation
-     - `app.store.authorize` - Receive OAuth tokens
-     - `app.uninstalled` - Handle app removal
-     - `product.deleted` - Sync product deletions
+2. **Required API Permissions**:
+   - `Products` - Read/Write access for product management
+   - `Orders` - Read access for order processing
+   - `Categories` - Read/Write for category organization
+   - `System Status` - Read access for health checks
 
-3. **Automatic Installation Flow**:
+3. **Store Setup in Platform**:
    ```
-   Merchant Installs App → app.installed webhook → Store record created
+   Admin Login → Add New Store → Enter Store Details →
    ↓
-   Merchant Authorizes → app.store.authorize webhook → OAuth tokens received
+   Configure WooCommerce API Credentials → Test Connection →
    ↓
-   System auto-registers webhooks → Redirects to setup page
+   Setup Ubiqfy Account Details → Validate & Save
    ↓
-   Merchant enters Ubiqfy credentials → Integration ready!
+   Store Ready for Product Synchronization!
    ```
 
-> **🎯 Key Advantages**: 
-> - No manual OAuth flow implementation needed
-> - Zero credential management complexity  
-> - Automatic webhook registration and management
-> - Seamless merchant onboarding experience
+> **🎯 Key Features**: 
+> - Direct REST API integration for reliable performance
+> - Encrypted credential storage with AES-256-GCM
+> - Real-time API connectivity testing
+> - Granular permission control per store
+> - Multi-store management capabilities
 
 ### Ubiqfy Integration Setup
 1. **Obtain API Credentials**: Get credentials from your Ubiqfy account manager
@@ -257,7 +254,7 @@ This integration uses **automatic webhook-based setup** with zero manual configu
 
 ## 📋 API Reference
 
-### Core Store Management
+### Store Management Endpoints
 - `GET /clients` - List all stores with status and details (Superadmin only)
 - `GET /clients/add` - Add new store interface
 - `POST /clients/add` - Create new store record
@@ -269,16 +266,18 @@ This integration uses **automatic webhook-based setup** with zero manual configu
 - `GET /clients/stock/:id` - Stock management interface
 - `POST /clients/stock/:id/save-levels` - Update stock levels in bulk
 - `POST /clients/stock/:storeId/refresh-single` - Refresh single product stock
-- `POST /clients/stock/:storeId/refresh-all` - Refresh all store stock from wp
+- `POST /clients/stock/:storeId/refresh-all` - Refresh all store stock from WooCommerce
 - `GET /clients/sync/:id` - Product synchronization interface
 
-### wp Store Integration
-- `POST /wp-stores/:id/test-ubiqfy-auth` - Test Ubiqfy connection and fetch balance
-- `POST /wp-stores/:id/fetch-ubiqfy-products` - Fetch product catalog from Ubiqfy
-- `POST /wp-stores/:id/bulk-link-products` - Link multiple products to store
-- `POST /wp-stores/:id/sync-to-wp` - Sync selected products to wp store
-- `POST /wp-stores/:id/verify-sync-status` - Verify synchronization status
-- `GET /wp-stores/:id/synced-options` - Get all synced product options
+### WooCommerce Store Integration
+- `POST /woocommerce-stores/:id/test-connection` - Test WooCommerce API connectivity
+- `POST /woocommerce-stores/:id/test-ubiqfy-auth` - Test Ubiqfy connection and fetch balance
+- `POST /woocommerce-stores/:id/fetch-ubiqfy-products` - Fetch product catalog from Ubiqfy
+- `POST /woocommerce-stores/:id/bulk-link-products` - Link multiple products to store
+- `POST /woocommerce-stores/:id/sync-to-woocommerce` - Sync selected products to WooCommerce store
+- `POST /woocommerce-stores/:id/verify-sync-status` - Verify synchronization status
+- `GET /woocommerce-stores/:id/synced-options` - Get all synced product options
+- `POST /woocommerce-stores/:id/clear-credentials` - Clear stored WooCommerce credentials
 
 ### Purchase Order Management
 - `GET /voucher-purchases/purchase-orders` - Purchase orders management interface
@@ -305,16 +304,12 @@ This integration uses **automatic webhook-based setup** with zero manual configu
 - `GET /users/change-password` - Change password interface
 - `POST /users/change-password` - Update user password
 
-### Webhook Endpoints
-- `POST /wp-webhook/handle` - Main webhook handler for all wp events
-- `GET /wp-webhook/setup/:storeId` - Store setup page after installation
-- `POST /wp-webhook/setup/:storeId/complete` - Complete Ubiqfy setup
-
-### Authentication & Security
+### Security & Health Endpoints
 - `POST /auth/login` - User authentication
 - `POST /auth/logout` - User logout
 - `POST /utils/migrate-passwords` - Migrate passwords to encrypted format
 - `POST /utils/verify-encryption` - Verify encryption integrity
+- `GET /health` - Application health check
 
 ### Admin Management
 - `GET /admin/stores` - Admin store management interface
@@ -324,21 +319,21 @@ This integration uses **automatic webhook-based setup** with zero manual configu
 
 ### For Store Owners
 
-#### 1. **Zero-Configuration Installation**
+#### 1. **Manual Store Configuration**
 ```
-Install App from wp Store → Automatic webhook processing → 
-Enter Ubiqfy credentials → Start selling vouchers immediately!
+Generate WooCommerce API Keys → Add New Store in Platform → 
+Enter API credentials → Test Connection → Start selling vouchers!
 ```
 
-- Install the app from wp App Store
-- System automatically handles OAuth and webhook setup
-- Complete the one-time Ubiqfy credential setup
-- No technical configuration required!
+- Generate API keys from your WooCommerce admin panel
+- Add a new store in the integration platform and enter the credentials
+- Test the connection to ensure everything is working
+- No complex setup required!
 
 #### 2. **Product Management Made Simple**
-- **Sync Products**: Navigate to "Product Sync" → "Fetch Products" → Select & Configure → "Sync to wp"
+- **Sync Products**: Navigate to "Product Sync" → "Fetch Products" → Select & Configure → "Sync to WooCommerce"
 - **Pricing Control**: Set custom prices and markup percentages for each product
-- **Inventory Management**: Automatic stock updates from wp with manual override capabilities
+- **Inventory Management**: Automatic stock updates from WooCommerce with manual override capabilities
 - **Category Organization**: Products automatically organized by country and category
 
 #### 3. **Order Processing**
@@ -700,7 +695,7 @@ For enterprise customers, we offer:
 - **[Bootstrap](https://getbootstrap.com/)** - Popular CSS framework for responsive design
 
 ### API Partners
-- **[wp](https://wp.sa/)** - Leading Saudi e-commerce platform
+- **[WooCommerce](https://woocommerce.com/)** - Leading open-source e-commerce platform for WordPress
 - **[Ubiqfy](https://ubiqfy.com/)** - Digital voucher and gift card services
 
 ### Contributors
@@ -709,7 +704,7 @@ Special thanks to all contributors who have helped make this project possible. S
 ---
 
 <p align="center">
-  <strong>Built with ❤️ for the Saudi e-commerce ecosystem</strong>
+  <strong>Built with ❤️ for the WordPress & WooCommerce ecosystem</strong>
 </p>
 
 <p align="center">

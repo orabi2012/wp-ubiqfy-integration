@@ -1,11 +1,11 @@
-# wp-Ubiqfy Integration User Manual
+# WooCommerce-Ubiqfy Integration User Manual
 
 <p align="center">
   <img src="public/images/ubiqfy_logo.jpg" width="200" alt="Ubiqfy Logo" />
 </p>
 
 <p align="center">
-  <strong>Comprehensive guide for managing your wp-Ubiqfy integration platform</strong>
+  <strong>Comprehensive guide for managing your WooCommerce-Ubiqfy integration platform</strong>
 </p>
 
 ## Table of Contents
@@ -15,19 +15,18 @@
 4. [Stock Management](#stock-management)
 5. [Purchase Orders](#purchase-orders)
 6. [Analytics & Reporting](#analytics--reporting)
-7. [Webhook Management](#webhook-management)
-8. [Troubleshooting](#troubleshooting)
-9. [Support](#support)
+7. [Troubleshooting](#troubleshooting)
+8. [Support](#support)
 
 ---
 
 ## Getting Started
 
 ### Application Overview
-The wp-Ubiqfy Integration Platform is a comprehensive solution that bridges wp e-commerce stores with Ubiqfy's voucher services. This platform enables seamless:
+The WooCommerce-Ubiqfy Integration Platform is a comprehensive solution that bridges WooCommerce e-commerce stores with Ubiqfy's voucher services. This platform enables seamless:
 
-- **Automated Integration**: OAuth-based connection with wp stores
-- **Product Synchronization**: Real-time sync between Ubiqfy and wp catalogs
+- **Direct Integration**: REST API-based connection with WooCommerce stores
+- **Product Synchronization**: Real-time sync between Ubiqfy and WooCommerce catalogs
 - **Voucher Management**: Complete lifecycle management of digital vouchers
 - **Order Processing**: Streamlined purchase order workflow
 - **Financial Tracking**: Detailed reporting and invoice generation
@@ -49,12 +48,11 @@ The platform features a modern, responsive interface with:
 ## Store Settings
 
 ### Initial Setup
-After installation from the wp App Store, the system automatically:
+To connect your WooCommerce store, you need to manually configure the API credentials:
 
-1. **Receives Installation Webhook**: wp sends app installation notification
-2. **Creates Store Record**: System establishes your store profile
-3. **Handles Authorization**: Automatically processes OAuth tokens
-4. **Registers Webhooks**: Sets up event listeners for real-time updates
+1. **Generate API Keys**: In your WooCommerce admin panel, go to **WooCommerce > Settings > Advanced > REST API** to generate a Consumer Key and Consumer Secret with Read/Write permissions.
+2. **Add Store in Platform**: Navigate to the "Clients" or "Stores" section in the integration platform and click "Add New Store".
+3. **Enter Credentials**: Fill in your store URL, and the generated Consumer Key and Consumer Secret.
 
 ### Ubiqfy Configuration
 Complete your integration by providing:
@@ -66,16 +64,14 @@ Complete your integration by providing:
 
 ### Store Status Monitoring
 Monitor your integration health through:
-- **Connection Status**: Real-time API connectivity indicator
-- **Token Validity**: OAuth token expiration tracking
-- **Webhook Status**: Event processing health check
-- **Account Balance**: Current Ubiqfy account funds
+- **Connection Status**: Real-time API connectivity indicator for both WooCommerce and Ubiqfy.
+- **Account Balance**: Current Ubiqfy account funds.
 
 ---
 
 ## Sync Management
 
-Product synchronization allows you to fetch products from Ubiqfy and sync them to your wp store.
+Product synchronization allows you to fetch products from Ubiqfy and sync them to your WooCommerce store.
 
 ### Accessing Sync Management
 1. From the dashboard, click "Product Sync" or use the navigation menu
@@ -142,7 +138,7 @@ The stock management page displays:
    - System will alert you when products fall below these levels
 
 3. **Refresh Stock Data**:
-   - Click "Refresh All Stock" to update stock levels from wp
+   - Click "Refresh All Stock" to update stock levels from WooCommerce
    - Individual products can be refreshed using the refresh icon
 
 ### Stock Actions
@@ -237,7 +233,7 @@ Invoices display comprehensive information including:
 #### Order Summary
 - **Order Number**: Unique purchase order identifier
 - **Date**: Invoice generation date
-- **Store Information**: wp store details
+- **Store Information**: WooCommerce store details
 - **Status**: Completion status and statistics
 
 #### Voucher Details
@@ -247,7 +243,7 @@ Invoices display comprehensive information including:
 
 #### Detailed Voucher List
 For each successfully generated voucher:
-- **External ID**: wp product reference
+- **External ID**: WooCommerce product reference
 - **Amount**: Voucher face value and wholesale cost
 - **Serial Number**: Unique voucher identifier
 - **Transaction ID**: Ubiqfy transaction reference
@@ -284,14 +280,14 @@ For each successfully generated voucher:
 **Issue**: Currency conversion errors
 **Solutions**:
 1. Verify currency conversion rates in store settings
-2. Check that both Ubiqfy and wp currencies are configured
+2. Check that both Ubiqfy and WooCommerce currencies are configured
 3. Update conversion rates if exchange rates have changed
 
 #### Stock Management Issues
 **Issue**: Stock levels not updating
 **Solutions**:
 1. Click "Refresh All Stock" to force update
-2. Check wp API connection
+2. Check WooCommerce API connection
 3. Verify product synchronization status
 4. Review error messages in browser console
 
@@ -346,7 +342,7 @@ For each successfully generated voucher:
 ### Network Requirements
 - Stable internet connection
 - Access to Ubiqfy API endpoints
-- Access to wp API endpoints
+- Access to your WooCommerce store's REST API endpoints
 
 ### User Permissions
 - Valid user account with store assignment
@@ -357,16 +353,16 @@ For each successfully generated voucher:
 
 ## Glossary
 
-**wp**: E-commerce platform where your store is hosted  
+**WooCommerce**: The e-commerce platform for WordPress where your store is hosted  
 **Ubiqfy**: Voucher provider platform for purchasing digital vouchers  
-**Sync**: Process of updating product information between Ubiqfy and wp  
+**Sync**: Process of updating product information between Ubiqfy and WooCommerce  
 **Stock Management**: Monitoring and controlling inventory levels  
 **Purchase Order**: Request to purchase vouchers from Ubiqfy  
 **Invoice**: Detailed record of completed voucher purchases  
 **Face Value**: The value of a voucher as seen by end customers  
 **Wholesale Price**: The cost you pay to purchase vouchers from Ubiqfy  
 **Product Option**: Specific variations or denominations of a product  
-**External ID**: Unique identifier linking wp products to Ubiqfy vouchers
+**External ID**: Unique identifier linking WooCommerce products to Ubiqfy vouchers
 
 ---
 
