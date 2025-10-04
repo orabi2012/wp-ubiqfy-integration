@@ -748,12 +748,12 @@ export class DoTransactionService {
             const store = purchase.wpStore;
 
             // Validate store has WooCommerce credentials
-            if (!store.wp_store_url || !store.wp_consumer_key || !store.wp_consumer_secret) {
+            if (!store.wp_store_url || !store.wp_consumer_key || !store.getDecryptedConsumerSecret()) {
                 throw new Error('Store missing WooCommerce credentials for key attachment');
             }
 
             // Create WooCommerce authentication headers
-            const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
+            const auth = Buffer.from(`${store.wp_consumer_key}:${store.getDecryptedConsumerSecret()}`).toString('base64');
             const headers = {
                 'Authorization': `Basic ${auth}`,
                 'Content-Type': 'application/json',

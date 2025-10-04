@@ -407,7 +407,7 @@ export class wpStoresService {
    */
   async getwpProductStock(store: wpStore, productId: string): Promise<any> {
     try {
-      const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
+      const auth = Buffer.from(`${store.wp_consumer_key}:${store.getDecryptedConsumerSecret()}`).toString('base64');
       const response = await fetch(`${store.wp_store_url}/wp-json/wc/v3/products/${productId}`, {
         method: 'GET',
         headers: {
@@ -451,7 +451,7 @@ export class wpStoresService {
       }
 
       const store = option.storeProduct.wpStore;
-      if (!store.wp_consumer_key || !store.wp_consumer_secret) {
+      if (!store.wp_consumer_key || !store.getDecryptedConsumerSecret()) {
         return { success: false, message: 'Store WooCommerce credentials not available' };
       }
 
@@ -509,7 +509,7 @@ export class wpStoresService {
         return { success: false, updated: 0, errors: 1, message: 'Store not found' };
       }
 
-      if (!store.wp_consumer_key || !store.wp_consumer_secret) {
+      if (!store.wp_consumer_key || !store.getDecryptedConsumerSecret()) {
         return { success: false, updated: 0, errors: 1, message: 'Store WooCommerce credentials not available' };
       }
 

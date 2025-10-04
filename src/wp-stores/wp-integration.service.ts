@@ -50,7 +50,7 @@ export class wpIntegrationService {
    * Get WooCommerce authentication headers
    */
   private getWooCommerceHeaders(store: wpStore): Record<string, string> {
-    const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
+    const auth = Buffer.from(`${store.wp_consumer_key}:${store.getDecryptedConsumerSecret()}`).toString('base64');
     return {
       Authorization: `Basic ${auth}`,
       'Content-Type': 'application/json',
@@ -1107,7 +1107,7 @@ export class wpIntegrationService {
         return { connected: false, error: 'Store not found' };
       }
 
-      if (!store.wp_consumer_key || !store.wp_consumer_secret) {
+      if (!store.wp_consumer_key || !store.getDecryptedConsumerSecret()) {
         return { connected: false, error: 'No WooCommerce credentials configured' };
       }
 
@@ -1450,7 +1450,7 @@ export class wpIntegrationService {
    */
   private async validateWooCommerceCredentials(store: wpStore): Promise<void> {
     // Check if we have credentials
-    if (!store.wp_consumer_key || !store.wp_consumer_secret) {
+    if (!store.wp_consumer_key || !store.getDecryptedConsumerSecret()) {
       throw new HttpException(
         'WooCommerce consumer key and secret not configured for this store',
         HttpStatus.BAD_REQUEST,
@@ -1459,7 +1459,7 @@ export class wpIntegrationService {
 
     // Test the credentials by making a simple API call
     try {
-      const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
+      const auth = Buffer.from(`${store.wp_consumer_key}:${store.getDecryptedConsumerSecret()}`).toString('base64');
       const testHeaders = {
         Authorization: `Basic ${auth}`,
         Accept: 'application/json',
@@ -1491,7 +1491,7 @@ export class wpIntegrationService {
   private async getStoreInfo(
     store: wpStore,
   ): Promise<{ currency: string; country_code: string }> {
-    const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
+    const auth = Buffer.from(`${store.wp_consumer_key}:${store.getDecryptedConsumerSecret()}`).toString('base64');
     const headers = {
       Authorization: `Basic ${auth}`,
       'Content-Type': 'application/json',
@@ -1589,7 +1589,7 @@ export class wpIntegrationService {
         }
 
         // Try to fetch the product from WooCommerce
-        const auth = Buffer.from(`${store.wp_consumer_key}:${store.wp_consumer_secret}`).toString('base64');
+        const auth = Buffer.from(`${store.wp_consumer_key}:${store.getDecryptedConsumerSecret()}`).toString('base64');
         const response = await fetch(
           `${store.wp_store_url}/wp-json/wc/v3/products/${syncedOption.wp_product_id}`,
           {

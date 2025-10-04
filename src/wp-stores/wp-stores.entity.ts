@@ -112,11 +112,22 @@ export class wpStore {
   // Temporary field to hold decrypted password (not persisted)
   private decryptedPassword?: string;
 
+  // Temporary field to hold decrypted consumer secret (not persisted)
+  private decryptedConsumerSecret?: string;
+
   @BeforeInsert()
   @BeforeUpdate()
   encryptPassword() {
     if (this.ubiqfy_password && !this.isPasswordEncrypted(this.ubiqfy_password)) {
       this.ubiqfy_password = this.encryptPasswordStatic(this.ubiqfy_password);
+    }
+  }
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  encryptConsumerSecret() {
+    if (this.wp_consumer_secret && !this.isConsumerSecretEncrypted(this.wp_consumer_secret)) {
+      this.wp_consumer_secret = this.encryptConsumerSecretStatic(this.wp_consumer_secret);
     }
   }
 
@@ -129,6 +140,15 @@ export class wpStore {
     }
   }
 
+  @AfterLoad()
+  decryptConsumerSecret() {
+    if (this.wp_consumer_secret && this.isConsumerSecretEncrypted(this.wp_consumer_secret)) {
+      this.decryptedConsumerSecret = this.decryptConsumerSecretStatic(this.wp_consumer_secret);
+    } else {
+      this.decryptedConsumerSecret = this.wp_consumer_secret;
+    }
+  }
+
   /**
    * Get the decrypted password for API usage
    */
@@ -137,11 +157,26 @@ export class wpStore {
   }
 
   /**
+   * Get the decrypted consumer secret for API usage
+   */
+  getDecryptedConsumerSecret(): string {
+    return this.decryptedConsumerSecret || this.wp_consumer_secret;
+  }
+
+  /**
    * Set a new password (will be encrypted on save)
    */
   setPassword(newPassword: string) {
     this.ubiqfy_password = newPassword;
     this.decryptedPassword = newPassword;
+  }
+
+  /**
+   * Set a new consumer secret (will be encrypted on save)
+   */
+  setConsumerSecret(newSecret: string) {
+    this.wp_consumer_secret = newSecret;
+    this.decryptedConsumerSecret = newSecret;
   }
 
   // Static methods for encryption/decryption that work in entity hooks
@@ -169,6 +204,33 @@ export class wpStore {
       return `${iv.toString('base64')}:${encrypted}:${authTag.toString('base64')}`;
     } catch (error) {
       throw new Error(`Failed to encrypt password: ${error.message}`);
+    }
+  }
+
+  private encryptConsumerSecretStatic(secret: string): string {
+    const crypto = require('crypto');
+    const algorithm = 'aes-256-gcm';
+    const keyLength = 32;
+    const ivLength = 16;
+
+    if (!secret || secret.trim() === '') {
+      throw new Error('Consumer secret cannot be empty');
+    }
+
+    try {
+      const key = this.getEncryptionKeyStatic();
+      const iv = crypto.randomBytes(ivLength);
+      const cipher = crypto.createCipheriv(algorithm, key, iv);
+      cipher.setAAD(Buffer.from('wp-consumer-secret', 'utf8'));
+
+      let encrypted = cipher.update(secret, 'utf8', 'base64');
+      encrypted += cipher.final('base64');
+
+      const authTag = cipher.getAuthTag();
+
+      return `${iv.toString('base64')}:${encrypted}:${authTag.toString('base64')}`;
+    } catch (error) {
+      throw new Error(`Failed to encrypt consumer secret: ${error.message}`);
     }
   }
 
@@ -204,10 +266,57 @@ export class wpStore {
     }
   }
 
+  private decryptConsumerSecretStatic(encryptedSecret: string): string {
+    const crypto = require('crypto');
+    const algorithm = 'aes-256-gcm';
+
+    if (!encryptedSecret || encryptedSecret.trim() === '') {
+      throw new Error('Encrypted consumer secret cannot be empty');
+    }
+
+    try {
+      const parts = encryptedSecret.split(':');
+      if (parts.length !== 3) {
+        throw new Error('Invalid encrypted consumer secret format');
+      }
+
+      const [ivBase64, encryptedData, authTagBase64] = parts;
+      const key = this.getEncryptionKeyStatic();
+      const iv = Buffer.from(ivBase64, 'base64');
+      const authTag = Buffer.from(authTagBase64, 'base64');
+
+      const decipher = crypto.createDecipheriv(algorithm, key, iv);
+      decipher.setAAD(Buffer.from('wp-consumer-secret', 'utf8'));
+      decipher.setAuthTag(authTag);
+
+      let decrypted = decipher.update(encryptedData, 'base64', 'utf8');
+      decrypted += decipher.final('utf8');
+
+      return decrypted;
+    } catch (error) {
+      throw new Error(`Failed to decrypt consumer secret: ${error.message}`);
+    }
+  }
+
   private isPasswordEncrypted(password: string): boolean {
     if (!password) return false;
 
     const parts = password.split(':');
+    if (parts.length !== 3) return false;
+
+    try {
+      Buffer.from(parts[0], 'base64');
+      Buffer.from(parts[2], 'base64');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private isConsumerSecretEncrypted(secret: string): boolean {
+    if (!secret) return false;
+
+    const parts = secret.split(':');
     if (parts.length !== 3) return false;
 
     try {
