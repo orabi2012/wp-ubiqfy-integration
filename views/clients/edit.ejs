@@ -18,40 +18,28 @@
 
 </head>
 
-<body class="form-page-body">
-    <% const pageTitle="Edit Store" %>
-        <%- include('../shared/navbar') %>
+<% const sandboxClass=((typeof store !=='undefined' && store && store.ubiqfy_sandbox===true) || (typeof
+    sandboxEnvironment !=='undefined' && sandboxEnvironment===true)) ? 'sandbox-environment' : '' ; %>
 
-            <div class="container-fluid mt-2 px-3">
-                <div class="row">
-                    <div class="col-12">
-                        <!-- Store Status Card -->
-                        <div class="card mb-3">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <h5 class="mb-1">
-                                            <%= store.wp_store_name %>
-                                        </h5>
-                                        <p class="text-muted mb-0">Store URL: <%= store.wp_store_url %>
-                                        </p>
-                                    </div>
-                                    <div class="text-end">
-                                        <span
-                                            class="badge <%= store.is_active ? 'status-active' : 'status-inactive' %> mb-2">
-                                            <%= store.is_active ? 'Active' : 'Inactive' %>
+    <body class="form-page-body <%= sandboxClass %>">
+        <% const pageTitle="Edit Store" %>
+            <%- include('../shared/navbar') %>
+
+                <div class="container-fluid mt-2 px-3">
+                    <div class="row">
+                        <div class="col-12">
+                            <!-- Store Status Card -->
+                            <div class="card mb-3">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="badge bg-success mb-2">
+                                            Balance: <%= parseInt(store.ubiqfy_plafond) %>¢
                                         </span>
                                         <br>
-                                        <% if (store.ubiqfy_plafond !==null && store.ubiqfy_plafond !==undefined) { %>
-                                            <span class="badge bg-success mb-2">
-                                                Balance: <%= parseInt(store.ubiqfy_plafond) %>¢
-                                            </span>
-                                            <br>
-                                            <% } %>
-                                                <span class="badge bg-info">
-                                                    Last Sync: <%= store.last_sync_at ? new
-                                                        Date(store.last_sync_at).toLocaleString() : 'Never' %>
-                                                </span>
+                                        <span class="badge bg-info">
+                                            Last Sync: <%= store.last_sync_at ? new
+                                                Date(store.last_sync_at).toLocaleString() : 'Never' %>
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -410,32 +398,39 @@
                         </div>
                     </div>
                 </div>
-            </div>
+                </div>
 
-            <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
-            <!-- External JavaScript Files -->
-            <script src="/js/common.js"></script>
-            <script src="/js/bootstrap-init.js"></script>
-            <script src="/js/store-data-init.js"></script>
-            <script src="/js/client-edit.js"></script>
-            <script src="/js/edit-page.js"></script>
+                <!-- External JavaScript Files -->
+                <script src="/js/common.js"></script>
+                <script src="/js/bootstrap-init.js"></script>
+                <script src="/js/store-data-init.js"></script>
+                <script src="/js/client-edit.js"></script>
+                <script src="/js/edit-page.js"></script>
 
-            <script>
-                // Initialize store data from server-side variables
-                document.addEventListener('DOMContentLoaded', function () {
-                    const storeData = {
-                        id: '<%= store.id %>',
-                        wp_currency: '<%= store.wp_currency || "SAR" %>',
-                        currency_conversion_rate: parseFloat('<%= store.currency_conversion_rate || 3.75 %>'),
-                        ubiqfy_currency: '<%= store.ubiqfy_currency || "USD" %>'
-                    };
+                <script type="application/json" id="store-data-json"><%- JSON.stringify({
+                id: store.id,
+                wp_currency: store.wp_currency || 'SAR',
+                currency_conversion_rate: parseFloat(store.currency_conversion_rate || 3.75),
+                ubiqfy_currency: store.ubiqfy_currency || 'USD',
+                ubiqfy_sandbox: !!store.ubiqfy_sandbox
+            }) %></script>
+                <script>
+                    document.addEventListener('DOMContentLoaded', function () {
+                        const storeDataElement = document.getElementById('store-data-json');
+                        if (!storeDataElement) {
+                            return;
+                        }
 
-                    // Initialize the application with server data
-                    initializeStoreData(storeData);
-                });
-            </script>
-            </script>
-</body>
+                        try {
+                            const storeData = JSON.parse(storeDataElement.textContent || '{}');
+                            initializeStoreData(storeData);
+                        } catch (error) {
+                            console.error('Failed to parse store data JSON:', error);
+                        }
+                    });
+                </script>
+    </body>
 
 </html>

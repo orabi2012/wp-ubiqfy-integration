@@ -11,8 +11,20 @@ function initializeStoreData(storeData) {
     // Make store data available globally
     window.storeData = storeData;
 
-    // Log for debugging
-    console.log('Store data initialized:', storeData);
+    // Toggle environment classes for sandbox awareness
+    const isSandbox = !!storeData?.ubiqfy_sandbox;
+    const root = document.documentElement;
+    if (root) {
+        if (isSandbox) {
+            root.setAttribute('data-environment', 'sandbox');
+        } else {
+            root.removeAttribute('data-environment');
+        }
+    }
+
+    if (document.body) {
+        document.body.classList.toggle('sandbox-environment', isSandbox);
+    }
 
     // Dispatch a custom event to notify other scripts that store data is ready
     const event = new CustomEvent('storeDataReady', { detail: storeData });

@@ -33,11 +33,15 @@ export class VoucherPurchasesController {
             // Get all purchase orders - for super admin show all, for regular users show only their store's orders
             let purchaseOrders: any[] = [];
             let stats = { total: 0, completed: 0, pending: 0, totalValue: 0 };
+            let sandboxEnvironment = false;
+            let activeStore: wpStore | null = null;
 
             if (user.isSuperadmin) {
                 purchaseOrders = await this.voucherPurchasesService.getAllPurchases();
             } else if (user.assignedStoreId) {
                 purchaseOrders = await this.voucherPurchasesService.getPurchasesForStore(user.assignedStoreId);
+                activeStore = await this.wpStoreRepository.findOne({ where: { id: user.assignedStoreId } });
+                sandboxEnvironment = !!activeStore?.ubiqfy_sandbox;
             }
 
             // Calculate stats
@@ -86,7 +90,9 @@ export class VoucherPurchasesController {
                 title: 'Purchase Orders Management',
                 user: user,
                 purchaseOrders: enhancedOrders,
-                stats
+                stats,
+                sandboxEnvironment,
+                store: activeStore,
             };
         } catch (error) {
             this.logger.error('Error loading purchase orders page:', error);
@@ -95,7 +101,8 @@ export class VoucherPurchasesController {
                 user: req.user,
                 purchaseOrders: [],
                 stats: { total: 0, completed: 0, pending: 0, totalValue: 0 },
-                errorMessage: 'Failed to load purchase orders'
+                errorMessage: 'Failed to load purchase orders',
+                sandboxEnvironment: false,
             };
         }
     }

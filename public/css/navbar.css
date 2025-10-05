@@ -123,3 +123,31 @@
     color: #f8f9fa !important;
     transform: translateY(-2px);
 }
+
+.navbar-toggler {
+    border: 2px solid rgba(255, 255, 255, 0.3) !important;
+    border-radius: 8px !important;
+    transition: all 0.3s ease;
+}
+
+.navbar-toggler:focus {
+    box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Sandbox theme overrides */
+body.sandbox-environment .top-navbar,
+body.sandbox-environment .navbar {
+    background: linear-gradient(135deg, #ec4899 0%, #4f46e5 100%) !important;
+    box-shadow: 0 10px 36px rgba(236, 72, 153, 0.35) !important;
+    border-bottom-color: rgba(255, 255, 255, 0.25);
+}
+
+body.sandbox-environment .user-info {
+    background: rgba(255, 255, 255, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+body.sandbox-environment .user-info i {
+    background: linear-gradient(45deg, #f97316, #facc15);
+    color: #451a03;
+}

@@ -295,3 +295,73 @@ input:checked+.slider:before {
 .breadcrumb-item+.breadcrumb-item::before {
     color: rgba(255, 255, 255, 0.7) !important;
 }
+
+/* Sandbox environment theming */
+body.sandbox-environment {
+    background: linear-gradient(160deg, #fff5f7 0%, #eef2ff 100%);
+    min-height: 100vh;
+}
+
+body.sandbox-environment .card {
+    border: 1px solid rgba(236, 72, 153, 0.18);
+    box-shadow: 0 12px 28px rgba(236, 72, 153, 0.12);
+}
+
+body.sandbox-environment .card-header {
+    border-bottom-color: rgba(236, 72, 153, 0.25);
+}
+
+body.sandbox-environment .btn-primary {
+    background-color: #ec4899;
+    color: #fff;
+}
+
+body.sandbox-environment .btn-primary:not(:disabled):hover {
+    background-color: #db2777;
+}
+
+body.sandbox-environment .btn-secondary {
+    background-color: rgba(14, 165, 233, 0.2);
+    color: #0f172a;
+}
+
+body.sandbox-environment .badge {
+    box-shadow: 0 0 0 1px rgba(236, 72, 153, 0.25);
+}
+
+body.sandbox-environment .modern-nav {
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.95), rgba(14, 165, 233, 0.95)) !important;
+}
+
+body.sandbox-environment .modern-nav .nav-link.active,
+body.sandbox-environment .modern-nav .nav-link:hover {
+    background: rgba(255, 255, 255, 0.22) !important;
+    box-shadow: 0 4px 12px rgba(236, 72, 153, 0.25);
+}
+
+.sandbox-banner {
+    display: none;
+    background: linear-gradient(90deg, rgba(236, 72, 153, 0.95) 0%, rgba(14, 165, 233, 0.95) 100%);
+    color: #fff;
+    padding: 0.55rem 1.25rem;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    box-shadow: 0 10px 25px rgba(236, 72, 153, 0.22);
+}
+
+.sandbox-banner .environment-pill {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.2rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+}
+
+body.sandbox-environment .sandbox-banner {
+    display: flex;
+}

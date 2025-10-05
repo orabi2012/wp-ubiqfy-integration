@@ -16,12 +16,10 @@
     <link href="/css/clients.css" rel="stylesheet">
 </head>
 
-<body class="form-page-body">
+<% const sandboxClass=((typeof store !=='undefined' && store && store.ubiqfy_sandbox===true) || (typeof
+    sandboxEnvironment !=='undefined' && sandboxEnvironment===true)) ? 'sandbox-environment' : '' ; %>
 
-    </style>
-    </head>
-
-    <body>
+    <body class="form-page-body <%= sandboxClass %>">
         <% const pageTitle="Stock Management" %>
             <%- include('../shared/navbar') %>
 

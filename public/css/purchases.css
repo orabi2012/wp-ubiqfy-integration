@@ -108,6 +108,19 @@
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
+.stats-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 15px;
+    transition: all 0.3s ease;
+    box-shadow: 0 6px 18px rgba(102, 126, 234, 0.25);
+}
+
+.stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 32px rgba(102, 126, 234, 0.35);
+}
+
 /* Purchase table styling */
 .purchase-table {
     background: rgba(255, 255, 255, 0.95);

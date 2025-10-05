@@ -78,7 +78,8 @@ export class StoreController {
                 title: 'Purchase Orders',
                 user: req.user,
                 store: store,
-                purchases: purchases
+                purchases: purchases,
+                sandboxEnvironment: !!store?.ubiqfy_sandbox,
             });
         } catch (error) {
             console.error('Error loading purchase orders:', error);
@@ -93,6 +94,17 @@ export class StoreController {
     @Get(':storeId/purchase-order')
     @UseGuards(StoreAccessGuard)
     async getPurchaseOrderPage(@Request() req, @Res() res, @Query('orderId') orderId?: string) {
+        const storeId = req.params.storeId;
+        const store = await this.wpStoresService.findById(storeId);
+
+        if (!store) {
+            return res.render('error', {
+                title: 'Store Not Found',
+                message: 'The requested store could not be found. Please verify the URL or contact an administrator.',
+                user: req.user,
+            });
+        }
+
         let existingOrder: any = null;
 
         if (orderId) {
@@ -107,10 +119,12 @@ export class StoreController {
         return res.render('purchase/create', {
             title: existingOrder ? 'Edit Purchase Order' : 'Create Purchase Order',
             user: req.user,
-            storeId: req.params.storeId,
+            storeId: storeId,
             userId: req.user.userId,
             existingOrder: existingOrder,
             orderId: orderId || null,
+            store,
+            sandboxEnvironment: !!store.ubiqfy_sandbox,
         });
     }
 
@@ -133,11 +147,20 @@ export class StoreController {
         try {
             // Load purchase order with all details
             const order = await this.voucherPurchasesService.getPurchaseWithDetails(orderId);
+            const store = await this.wpStoresService.findById(storeId);
 
             if (!order) {
                 return res.status(404).render('error', {
                     title: 'Order Not Found',
                     message: 'The requested purchase order could not be found.',
+                    user: req.user,
+                });
+            }
+
+            if (!store) {
+                return res.status(404).render('error', {
+                    title: 'Store Not Found',
+                    message: 'The store associated with this order could not be located. Please contact support.',
                     user: req.user,
                 });
             }
@@ -180,6 +203,8 @@ export class StoreController {
                 groupedVouchers: groupedVouchers,
                 totals: totals,
                 storeId: req.params.storeId,
+                store,
+                sandboxEnvironment: !!store.ubiqfy_sandbox,
             });
         } catch (error) {
             console.error('Error loading purchase order for invoice:', error);
@@ -194,6 +219,7 @@ export class StoreController {
     @Get(':storeId/test-purchase')
     @UseGuards(StoreAccessGuard)
     async getTestPurchaseOrderPage(@Request() req, @Res() res, @Query('orderId') orderId?: string) {
+        const store = await this.wpStoresService.findById(req.params.storeId);
         let existingOrder: any = null;
 
         if (orderId) {
@@ -213,6 +239,8 @@ export class StoreController {
             userId: req.user.userId,
             existingOrder: existingOrder,
             orderId: orderId || null,
+            store,
+            sandboxEnvironment: !!store?.ubiqfy_sandbox,
         });
     }
 }
