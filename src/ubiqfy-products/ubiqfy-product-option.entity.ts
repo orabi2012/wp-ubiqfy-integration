@@ -32,9 +32,6 @@ export class UbiqfyProductOption {
   @Column({ nullable: true })
   logo_url: string;
 
-  @Column({ type: 'decimal', precision: 15, scale: 6, nullable: true })
-  value: number;
-
   // Face value range
   @Column({ type: 'decimal', precision: 15, scale: 6, nullable: true })
   min_face_value: number;
@@ -72,4 +69,8 @@ export class UbiqfyProductOption {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  // Mirrors environment of parent product for easier querying/indexing
+  @Column({ default: false })
+  is_sandbox: boolean;
 }

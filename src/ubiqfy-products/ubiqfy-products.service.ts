@@ -15,13 +15,14 @@ export class UbiqfyProductsService {
 
   async saveProductsFromApiResponse(
     productsData: any[],
+    isSandbox: boolean = false,
   ): Promise<UbiqfyProduct[]> {
     const savedProducts: UbiqfyProduct[] = [];
 
     for (const productData of productsData) {
       // Check if product already exists
       let existingProduct = await this.ubiqfyProductRepo.findOne({
-        where: { product_code: productData.ProductCode },
+        where: { product_code: productData.ProductCode, is_sandbox: isSandbox },
         relations: ['options'],
       });
 
@@ -30,10 +31,11 @@ export class UbiqfyProductsService {
         existingProduct = await this.updateProductFromApiData(
           existingProduct,
           productData,
+          isSandbox,
         );
       } else {
         // Create new product
-        existingProduct = await this.createProductFromApiData(productData);
+        existingProduct = await this.createProductFromApiData(productData, isSandbox);
       }
 
       savedProducts.push(existingProduct);
@@ -44,6 +46,7 @@ export class UbiqfyProductsService {
 
   private async createProductFromApiData(
     productData: any,
+    isSandbox: boolean,
   ): Promise<UbiqfyProduct> {
     const product = this.ubiqfyProductRepo.create({
       name: productData.Name,
@@ -68,18 +71,7 @@ export class UbiqfyProductsService {
       discount: productData.Discount || 0,
       product_url: productData.ProductUrl,
       terms_conditions: productData.TermsConditions,
-      reference_length: productData.ReferenceLength,
-      group_code: productData.GroupCode,
-      vfp_code: productData.VFPCode,
-      vgp_code: productData.VGPCode,
-      general_data_message: productData.GeneralDataMessage,
-      dealer_code: productData.DealerCode,
-      dealer_type: productData.DealerType,
-      group_key: productData.GroupKey,
-      image_code: productData.ImageCode,
-      pin_expiry_time: productData.PinExpiryTime,
-      mandatory_fields: productData.MandatoryFields,
-      visible_fields: productData.VisibleFields,
+      is_sandbox: isSandbox,
     });
 
     const savedProduct = await this.ubiqfyProductRepo.save(product);
@@ -93,6 +85,7 @@ export class UbiqfyProductsService {
         savedProduct.id,
         productData.ProductOptionsList,
         productData.ProductCurrencyCode,
+        isSandbox,
       );
     }
 
@@ -113,6 +106,7 @@ export class UbiqfyProductsService {
   private async updateProductFromApiData(
     existingProduct: UbiqfyProduct,
     productData: any,
+    isSandbox: boolean,
   ): Promise<UbiqfyProduct> {
     // Update product fields
     existingProduct.name = productData.Name;
@@ -138,18 +132,7 @@ export class UbiqfyProductsService {
     existingProduct.discount = productData.Discount || 0;
     existingProduct.product_url = productData.ProductUrl;
     existingProduct.terms_conditions = productData.TermsConditions;
-    existingProduct.reference_length = productData.ReferenceLength;
-    existingProduct.group_code = productData.GroupCode;
-    existingProduct.vfp_code = productData.VFPCode;
-    existingProduct.vgp_code = productData.VGPCode;
-    existingProduct.general_data_message = productData.GeneralDataMessage;
-    existingProduct.dealer_code = productData.DealerCode;
-    existingProduct.dealer_type = productData.DealerType;
-    existingProduct.group_key = productData.GroupKey;
-    existingProduct.image_code = productData.ImageCode;
-    existingProduct.pin_expiry_time = productData.PinExpiryTime;
-    existingProduct.mandatory_fields = productData.MandatoryFields;
-    existingProduct.visible_fields = productData.VisibleFields;
+    existingProduct.is_sandbox = isSandbox;
 
     const savedProduct = await this.ubiqfyProductRepo.save(existingProduct);
 
@@ -164,6 +147,7 @@ export class UbiqfyProductsService {
         savedProduct.id,
         productData.ProductOptionsList,
         productData.ProductCurrencyCode,
+        isSandbox,
       );
     }
 
@@ -184,7 +168,8 @@ export class UbiqfyProductsService {
   private async saveProductOptions(
     productId: string,
     optionsData: any[],
-    productCurrencyCode?: string,
+    productCurrencyCode: string | undefined,
+    isSandbox: boolean,
   ): Promise<void> {
     for (const optionData of optionsData) {
       const option = this.ubiqfyProductOptionRepo.create({
@@ -194,7 +179,6 @@ export class UbiqfyProductsService {
         ean_sku_upc: optionData.EanSkuUpc,
         description: optionData.Description,
         logo_url: optionData.Logo,
-        value: optionData.Value,
         min_face_value: optionData.MinMaxFaceRangeValue?.MinFaceValue,
         max_face_value: optionData.MinMaxFaceRangeValue?.MaxFaceValue,
         product_currency_code: productCurrencyCode, // Use product's currency code
@@ -202,14 +186,17 @@ export class UbiqfyProductsService {
         max_value: optionData.MinMaxRangeValue?.MaxValue,
         min_wholesale_value: optionData.MinMaxRangeValue?.MinWholesaleValue,
         max_wholesale_value: optionData.MinMaxRangeValue?.MaxWholesaleValue,
+        is_sandbox: isSandbox,
       });
 
       await this.ubiqfyProductOptionRepo.save(option);
     }
   }
 
-  async findAllProducts(): Promise<UbiqfyProduct[]> {
+  async findAllProducts(includeSandbox = true): Promise<UbiqfyProduct[]> {
+    const where = includeSandbox ? {} : { is_sandbox: false };
     return await this.ubiqfyProductRepo.find({
+      where,
       relations: ['options'],
       order: { created_at: 'DESC' },
     });
@@ -222,9 +209,11 @@ export class UbiqfyProductsService {
     });
   }
 
-  async findProductByCode(productCode: string): Promise<UbiqfyProduct | null> {
+  async findProductByCode(productCode: string, isSandbox?: boolean): Promise<UbiqfyProduct | null> {
+    const where: any = { product_code: productCode };
+    if (typeof isSandbox === 'boolean') where.is_sandbox = isSandbox;
     return await this.ubiqfyProductRepo.findOne({
-      where: { product_code: productCode },
+      where,
       relations: ['options'],
     });
   }

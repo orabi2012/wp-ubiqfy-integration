@@ -280,6 +280,7 @@ export class wpStoresService {
             savedProducts =
               await this.ubiqfyProductsService.saveProductsFromApiResponse(
                 productsData,
+                store.ubiqfy_sandbox,
               );
           } catch (error) {
             // Continue execution even if database save fails

@@ -206,17 +206,24 @@ function deselectAllProducts() {
 }
 
 /**
- * Toggle all products based on checkbox state
+ * Toggle all products based on checkbox state (only visible/filtered products)
  */
 function toggleAllProducts() {
     const mainCheckbox = document.getElementById('selectAllProductsCheckbox');
-    const checkboxes = document.querySelectorAll('.product-checkbox');
+    const allCheckboxes = document.querySelectorAll('.product-checkbox');
+
+    // Filter to only include checkboxes from visible products
+    const visibleCheckboxes = Array.from(allCheckboxes).filter(checkbox => {
+        const productContainer = checkbox.closest('.col-12');
+        return productContainer && productContainer.style.display !== 'none';
+    });
 
     console.log(`Toggle all products - Main checkbox checked: ${mainCheckbox.checked}`);
-    console.log(`Total product checkboxes found: ${checkboxes.length}`);
+    console.log(`Total product checkboxes found: ${allCheckboxes.length}`);
+    console.log(`Visible product checkboxes found: ${visibleCheckboxes.length}`);
 
     let changeCount = 0;
-    checkboxes.forEach(checkbox => {
+    visibleCheckboxes.forEach(checkbox => {
         if (checkbox.checked !== mainCheckbox.checked) {
             checkbox.checked = mainCheckbox.checked;
             togglePricingConfig(checkbox);
@@ -225,31 +232,42 @@ function toggleAllProducts() {
     });
 
     const action = mainCheckbox.checked ? 'Selected' : 'Deselected';
-    console.log(`${action} ${changeCount} product checkboxes`);
+    console.log(`${action} ${changeCount} visible product checkboxes`);
     updateSelectedCount();
     updateMainCheckboxState();
 }
 
 /**
- * Update the state of the main "Select All" checkbox based on individual product selections
+ * Update the state of the main "Select All" checkbox based on individual product selections (only visible products)
  */
 function updateMainCheckboxState() {
     const mainCheckbox = document.getElementById('selectAllProductsCheckbox');
     if (!mainCheckbox) return;
 
-    const checkboxes = document.querySelectorAll('.product-checkbox');
-    const checkedBoxes = document.querySelectorAll('.product-checkbox:checked');
+    const allCheckboxes = document.querySelectorAll('.product-checkbox');
+    const allCheckedBoxes = document.querySelectorAll('.product-checkbox:checked');
 
-    if (checkedBoxes.length === 0) {
-        // No products selected
+    // Filter to only include checkboxes from visible products
+    const visibleCheckboxes = Array.from(allCheckboxes).filter(checkbox => {
+        const productContainer = checkbox.closest('.col-12');
+        return productContainer && productContainer.style.display !== 'none';
+    });
+
+    const visibleCheckedBoxes = Array.from(allCheckedBoxes).filter(checkbox => {
+        const productContainer = checkbox.closest('.col-12');
+        return productContainer && productContainer.style.display !== 'none';
+    });
+
+    if (visibleCheckedBoxes.length === 0) {
+        // No visible products selected
         mainCheckbox.checked = false;
         mainCheckbox.indeterminate = false;
-    } else if (checkedBoxes.length === checkboxes.length) {
-        // All products selected
+    } else if (visibleCheckedBoxes.length === visibleCheckboxes.length) {
+        // All visible products selected
         mainCheckbox.checked = true;
         mainCheckbox.indeterminate = false;
     } else {
-        // Some products selected
+        // Some visible products selected
         mainCheckbox.checked = false;
         mainCheckbox.indeterminate = true;
     }

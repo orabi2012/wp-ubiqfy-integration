@@ -61,6 +61,12 @@ function initializeOptionCheckboxStates() {
 
 /**
  * Filter products based on search input
+ * Searches in:
+ * - Product names (card titles)
+ * - Product codes (text elements and data attributes)
+ * - Product option names
+ * - Product option codes (text elements and data attributes)
+ * - Country badges
  */
 function filterProducts() {
     const searchTerm = document.getElementById('productSearch')?.value.toLowerCase() || '';
@@ -72,6 +78,13 @@ function filterProducts() {
         const productCode = card.querySelector('.text-muted')?.textContent.toLowerCase() || '';
         const countryBadge = card.querySelector('.badge.bg-secondary')?.textContent.toLowerCase() || '';
 
+        // Also check data-product-code attribute for more reliable product code search
+        const productCodeAttr = card.getAttribute('data-product-code')?.toLowerCase() || '';
+
+        // Search in product checkbox data-product-code as well
+        const productCheckbox = card.querySelector('.product-checkbox');
+        const checkboxProductCode = productCheckbox?.getAttribute('value')?.toLowerCase() || '';
+
         // Also search in option codes and option names within each product
         const optionElements = card.querySelectorAll('.option-card');
         let optionMatches = false;
@@ -81,13 +94,25 @@ function filterProducts() {
             const optionCodeSmall = optionCard.querySelector('small.text-muted');
             const optionCode = optionCodeSmall?.textContent.toLowerCase() || '';
 
-            if (optionName.includes(searchTerm) || optionCode.includes(searchTerm)) {
+            // Also check data-option-code attribute
+            const optionCodeAttr = optionCard.getAttribute('data-option-code')?.toLowerCase() || '';
+
+            // Search in option checkbox data-option-code as well
+            const optionCheckbox = optionCard.querySelector('.option-checkbox');
+            const checkboxOptionCode = optionCheckbox?.getAttribute('data-option-code')?.toLowerCase() || '';
+
+            if (optionName.includes(searchTerm) ||
+                optionCode.includes(searchTerm) ||
+                optionCodeAttr.includes(searchTerm) ||
+                checkboxOptionCode.includes(searchTerm)) {
                 optionMatches = true;
             }
         });
 
         const isVisible = productName.includes(searchTerm) ||
             productCode.includes(searchTerm) ||
+            productCodeAttr.includes(searchTerm) ||
+            checkboxProductCode.includes(searchTerm) ||
             countryBadge.includes(searchTerm) ||
             optionMatches;
 

@@ -80,35 +80,11 @@ export class UbiqfyProduct {
   @Column({ type: 'text', nullable: true })
   terms_conditions: string;
 
-  @Column({ nullable: true })
-  reference_length: string;
-
-  @Column({ nullable: true })
-  group_code: string;
-
-  @Column({ nullable: true })
-  vfp_code: string;
-
-  @Column({ nullable: true })
-  vgp_code: string;
-
-  @Column({ type: 'text', nullable: true })
-  general_data_message: string;
-
-  @Column({ nullable: true })
-  dealer_code: string;
-
-  @Column({ nullable: true })
-  dealer_type: string;
-
-  @Column({ nullable: true })
-  group_key: string;
-
-  @Column({ nullable: true })
-  image_code: string;
-
-  @Column({ nullable: true })
-  pin_expiry_time: string;
+  // Environment flag (false = production, true = sandbox)
+  // This allows storing two versions of the catalog simultaneously
+  // to avoid sandbox data overwriting live data.
+  @Column({ default: false })
+  is_sandbox: boolean;
 
   // JSON fields for complex data
   @Column({ type: 'json', nullable: true })
