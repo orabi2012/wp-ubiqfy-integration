@@ -131,6 +131,33 @@ function deselectAllCountries() {
     checkboxes.forEach(checkbox => {
         checkbox.checked = false;
     });
+
+    // Uncheck all products and options since no countries are selected
+    const allProductCheckboxes = document.querySelectorAll('input[type="checkbox"][id^="product-"]');
+    allProductCheckboxes.forEach(productCheckbox => {
+        if (productCheckbox.checked) {
+            productCheckbox.checked = false;
+            if (typeof togglePricingConfig === 'function') {
+                togglePricingConfig(productCheckbox);
+            }
+        }
+    });
+
+    const allOptionCheckboxes = document.querySelectorAll('input[type="checkbox"][id^="option-"]');
+    allOptionCheckboxes.forEach(optionCheckbox => {
+        if (optionCheckbox.checked) {
+            optionCheckbox.checked = false;
+            if (typeof updateOptionCheckboxVisualState === 'function') {
+                updateOptionCheckboxVisualState(optionCheckbox);
+            }
+        }
+    });
+
+    // Update selection counts
+    if (typeof updateSelectedCount === 'function') {
+        updateSelectedCount();
+    }
+
     applyCountryFilter();
 }
 
@@ -166,10 +193,40 @@ function applyCountryFilter() {
         const isVisible = selectedCountries.length > 0 && selectedCountries.includes(country);
         card.style.display = isVisible ? 'block' : 'none';
 
+        // If country is not selected, uncheck the product and all its options
+        if (!isVisible) {
+            // Uncheck main product checkbox
+            const productCheckbox = card.querySelector('input[type="checkbox"][id^="product-"]');
+            if (productCheckbox && productCheckbox.checked) {
+                productCheckbox.checked = false;
+                // Trigger change event to update related UI
+                if (typeof togglePricingConfig === 'function') {
+                    togglePricingConfig(productCheckbox);
+                }
+            }
+
+            // Uncheck all option checkboxes for this product
+            const optionCheckboxes = card.querySelectorAll('input[type="checkbox"][id^="option-"]');
+            optionCheckboxes.forEach(optionCheckbox => {
+                if (optionCheckbox.checked) {
+                    optionCheckbox.checked = false;
+                    // Trigger change event to update related UI
+                    if (typeof updateOptionCheckboxVisualState === 'function') {
+                        updateOptionCheckboxVisualState(optionCheckbox);
+                    }
+                }
+            });
+        }
+
         if (isVisible) {
             visibleCount++;
         }
     });
+
+    // Update selection counts after unchecking products/options
+    if (typeof updateSelectedCount === 'function') {
+        updateSelectedCount();
+    }
 
     // Update counts
     document.getElementById('filteredCountryCount').textContent = selectedCountries.length;
