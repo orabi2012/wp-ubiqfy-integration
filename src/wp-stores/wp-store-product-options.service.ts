@@ -151,6 +151,8 @@ export class wpStoreProductOptionsService {
           // Sync MinFaceValue and ProductCurrencyCode from Ubiqfy source
           min_face_value: ubiqfyOption.min_face_value,
           product_currency_code: ubiqfyOption.product_currency_code,
+          // Mirror environment flag from store product
+          is_sandbox: storeProduct?.is_sandbox || false,
         });
 
         console.log(`💾 DEBUG: Creating new option ${ubiqfyOption.product_option_code}:`);

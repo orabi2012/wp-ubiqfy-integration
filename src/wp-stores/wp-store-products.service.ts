@@ -29,8 +29,12 @@ export class wpStoreProductsService {
       throw new Error(`Store with ID ${storeId} not found`);
     }
 
+    // Fetch products matching the store's sandbox environment
     const products = await this.ubiqfyProductRepository.find({
-      where: { product_code: In(productCodes) },
+      where: {
+        product_code: In(productCodes),
+        is_sandbox: store.ubiqfy_sandbox
+      },
       relations: ['options'], // Include options for syncing
     });
 
@@ -52,6 +56,7 @@ export class wpStoreProductsService {
         where: {
           wp_store_id: storeId,
           ubiqfy_product_id: product.id,
+          is_sandbox: store.ubiqfy_sandbox,
         },
       });
 
@@ -60,6 +65,7 @@ export class wpStoreProductsService {
           wp_store_id: storeId,
           ubiqfy_product_id: product.id,
           is_active: true,
+          is_sandbox: store.ubiqfy_sandbox,
         });
 
         const saved = await this.storeProductRepository.save(storeProduct);
@@ -116,7 +122,18 @@ export class wpStoreProductsService {
     storeId: string,
     includeInactive = false,
   ): Promise<wpStoreProduct[]> {
-    const whereCondition: any = { wp_store_id: storeId };
+    // Get store to determine sandbox environment
+    const store = await this.wpStoreRepository.findOne({
+      where: { id: storeId },
+    });
+    if (!store) {
+      throw new Error(`Store with ID ${storeId} not found`);
+    }
+
+    const whereCondition: any = {
+      wp_store_id: storeId,
+      is_sandbox: store.ubiqfy_sandbox
+    };
     if (!includeInactive) {
       whereCondition.is_active = true;
     }
@@ -132,9 +149,18 @@ export class wpStoreProductsService {
     storeId: string,
     productId: string,
   ): Promise<void> {
+    // Get store to determine sandbox environment
+    const store = await this.wpStoreRepository.findOne({
+      where: { id: storeId },
+    });
+    if (!store) {
+      throw new Error(`Store with ID ${storeId} not found`);
+    }
+
     await this.storeProductRepository.delete({
       wp_store_id: storeId,
       ubiqfy_product_id: productId,
+      is_sandbox: store.ubiqfy_sandbox,
     });
   }
 
@@ -211,7 +237,10 @@ export class wpStoreProductsService {
 
     const productCodes = [...new Set(productData.map((p) => p.productCode))]; // Remove duplicates
     const products = await this.ubiqfyProductRepository.find({
-      where: { product_code: In(productCodes) },
+      where: {
+        product_code: In(productCodes),
+        is_sandbox: store.ubiqfy_sandbox
+      },
       relations: ['options'],
     });
 
@@ -237,6 +266,7 @@ export class wpStoreProductsService {
           where: {
             wp_store_id: storeId,
             ubiqfy_product_id: product.id,
+            is_sandbox: store.ubiqfy_sandbox,
           },
         });
 
@@ -254,6 +284,7 @@ export class wpStoreProductsService {
             ubiqfy_product_id: product.id,
             is_active:
               productInfo.isActive !== undefined ? productInfo.isActive : true,
+            is_sandbox: store.ubiqfy_sandbox,
           });
           console.log(
             `🆕 Created new store product for: ${product.product_code}`,
@@ -275,6 +306,7 @@ export class wpStoreProductsService {
             where: {
               wp_store_id: storeId,
               ubiqfy_product_id: product.id,
+              is_sandbox: store.ubiqfy_sandbox,
             },
           });
         }

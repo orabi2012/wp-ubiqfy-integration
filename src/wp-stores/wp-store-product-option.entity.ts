@@ -104,6 +104,10 @@ export class wpStoreProductOption {
   @Column({ type: 'varchar', length: 10, nullable: true })
   product_currency_code: string | null;
 
+  // Environment flag - mirrors the parent store product environment
+  @Column({ default: false })
+  is_sandbox: boolean;
+
   @CreateDateColumn()
   created_at: Date;
 

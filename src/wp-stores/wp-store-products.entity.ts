@@ -14,7 +14,7 @@ import { UbiqfyProduct } from '../ubiqfy-products/ubiqfy-product.entity';
 import { wpStoreProductOption } from './wp-store-product-option.entity';
 
 @Entity('wp_store_products')
-@Index(['wp_store_id', 'ubiqfy_product_id'], { unique: true }) // Prevent duplicate entries
+@Index(['wp_store_id', 'ubiqfy_product_id', 'is_sandbox'], { unique: true }) // Prevent duplicate entries per environment
 export class wpStoreProduct {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -42,6 +42,11 @@ export class wpStoreProduct {
   // Store-specific product configuration
   @Column({ default: true })
   is_active: boolean;
+
+  // Environment flag - mirrors the Ubiqfy product environment
+  // Allows stores to have separate sandbox/production catalogs
+  @Column({ default: false })
+  is_sandbox: boolean;
 
   @Column({ nullable: true })
   wp_category_id: string; // Main Category ID in wp store
