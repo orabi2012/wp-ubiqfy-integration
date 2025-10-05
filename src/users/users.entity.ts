@@ -28,11 +28,11 @@ export class User {
   isSuperadmin: boolean;
 
   @Column({ nullable: true })
-  assignedStoreId: string;
+  assignedStoreId: string | null;
 
   @ManyToOne(() => wpStore, { nullable: true })
   @JoinColumn({ name: 'assignedStoreId' })
-  assignedStore: wpStore;
+  assignedStore: wpStore | null;
 
   @BeforeInsert()
   @BeforeUpdate()

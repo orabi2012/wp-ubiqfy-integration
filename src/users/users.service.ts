@@ -66,7 +66,7 @@ export class UsersService implements OnModuleInit {
   async createUser(userData: {
     username: string;
     password: string;
-    assignedStoreId?: string;
+    assignedStoreId?: string | null;
   }): Promise<User> {
     const user = this.userRepo.create({
       username: userData.username,
@@ -81,7 +81,7 @@ export class UsersService implements OnModuleInit {
   async updateUser(id: string, userData: {
     username?: string;
     password?: string;
-    assignedStoreId?: string;
+    assignedStoreId?: string | null;
     isActive?: boolean;
   }): Promise<User | null> {
     // Find the existing user
@@ -94,24 +94,44 @@ export class UsersService implements OnModuleInit {
       return null;
     }
 
+    // Build update data
+    const updateData: any = {};
+
     // Update the user fields
     if (userData.username !== undefined) {
-      existingUser.username = userData.username;
+      updateData.username = userData.username;
     }
     if (userData.assignedStoreId !== undefined) {
-      existingUser.assignedStoreId = userData.assignedStoreId;
+      // Handle empty string as null
+      const newStoreId = userData.assignedStoreId || null;
+      updateData.assignedStoreId = newStoreId;
     }
     if (userData.isActive !== undefined) {
-      existingUser.isActive = userData.isActive;
+      updateData.isActive = userData.isActive;
     }
 
     // Handle password update - only if a new password is provided
     if (userData.password && userData.password.trim() !== '') {
-      existingUser.password = userData.password; // This will be hashed by the @BeforeUpdate hook
+      // Hash the password manually since we're using update query
+      const saltRounds = 10;
+      updateData.password = await this.hashPassword(userData.password);
     }
 
-    // Save the user (this will trigger the @BeforeUpdate hook to hash the password)
-    return await this.userRepo.save(existingUser);
+    // Use QueryBuilder for direct database update
+    await this.userRepo
+      .createQueryBuilder()
+      .update(User)
+      .set(updateData)
+      .where('id = :id', { id })
+      .execute();
+
+    // Fetch the user again with relations to ensure we return the most up-to-date data
+    const refreshedUser = await this.userRepo.findOne({
+      where: { id },
+      relations: ['assignedStore']
+    });
+
+    return refreshedUser;
   }
 
   async deleteUser(id: string): Promise<void> {

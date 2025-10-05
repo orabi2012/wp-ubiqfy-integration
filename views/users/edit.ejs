@@ -55,7 +55,8 @@
                                 <nav class="nav nav-pills nav-fill modern-nav">
                                     <a href="/clients"
                                         class="nav-link text-white d-flex align-items-center justify-content-center py-3"
-                                        data-bs-toggle="tooltip" data-bs-placement="bottom" title="Manage wp stores">
+                                        data-bs-toggle="tooltip" data-bs-placement="bottom"
+                                        title="Manage WooCommerce stores">
                                         <i class="fas fa-store fa-lg me-2"></i>
                                         <span class="fw-semibold">Stores</span>
                                     </a>
@@ -109,7 +110,7 @@
                                                                         id="username" name="username" required
                                                                         value="<%= userToEdit.username %>"
                                                                         placeholder="Enter username"
-                                                                        pattern="[a-zA-Z0-9_.-]+"
+                                                                        pattern="[a-zA-Z0-9_.\-]+"
                                                                         title="Username can only contain letters, numbers, dots, dashes, and underscores">
                                                                 </div>
                                                             </div>
@@ -124,6 +125,7 @@
                                                                             id="password" name="password"
                                                                             placeholder="Leave blank to keep current password"
                                                                             minlength="6" maxlength="128"
+                                                                            autocomplete="new-password"
                                                                             pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d@$!%*?&]{6,}$"
                                                                             title="Password must be at least 6 characters and contain at least one uppercase letter, one lowercase letter, and one number">
                                                                         <button class="btn btn-outline-secondary"
@@ -167,7 +169,10 @@
                                                                     </label>
                                                                     <select class="form-select" id="assignedStoreId"
                                                                         name="assignedStoreId">
-                                                                        <option value="">No store assigned</option>
+                                                                        <option value=""
+                                                                            <%=(!userToEdit.assignedStoreId)
+                                                                            ? 'selected' : '' %>>No store assigned
+                                                                        </option>
                                                                         <% if (stores && stores.length> 0) { %>
                                                                             <% stores.forEach(function(store) { %>
                                                                                 <option value="<%= store.id %>"
