@@ -6,9 +6,13 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { UbiqfyProduct } from './ubiqfy-product.entity';
 
+// Ensure each option code is unique per product. Sandbox flag mirrors parent product; uniqueness does
+// not include is_sandbox because product_id already references the correct environment.
+@Index('UQ_ubiqfy_product_options_pid_code', ['product_id', 'product_option_code'], { unique: true })
 @Entity('ubiqfy_product_options')
 export class UbiqfyProductOption {
   @PrimaryGeneratedColumn('uuid')

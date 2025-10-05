@@ -15,6 +15,7 @@ import { wpStoresService } from './wp-stores.service';
 import { wpStoreProductsService } from './wp-store-products.service';
 import { wpStoreProductOptionsService } from './wp-store-product-options.service';
 import { wpIntegrationService } from './wp-integration.service';
+import { UbiqfyProductsService } from '../ubiqfy-products/ubiqfy-products.service';
 import { wpStore, SyncStatus } from './wp-stores.entity';
 import { SuperAdminGuard } from '../auth/super-admin.guard';
 import { StoreAccessGuard } from '../auth/store-access.guard';
@@ -28,6 +29,7 @@ export class wpStoresController {
     private readonly storeProductsService: wpStoreProductsService,
     private readonly storeProductOptionsService: wpStoreProductOptionsService,
     private readonly wpIntegrationService: wpIntegrationService,
+    private readonly ubiqfyProductsService: UbiqfyProductsService,
   ) { }
 
   private validateUUID(id: string): void {
@@ -183,6 +185,70 @@ export class wpStoresController {
     } catch (error) {
       throw new HttpException(
         `Failed to fetch Ubiqfy products: ${error.message}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Get(':id/products')
+  @UseGuards(StoreAccessGuard)
+  async getStoreCachedProducts(@Param('id') id: string) {
+    this.validateUUID(id);
+    try {
+      const store = await this.wpStoresService.findById(id);
+      if (!store) {
+        throw new HttpException('Store not found', HttpStatus.NOT_FOUND);
+      }
+
+      console.log('🔍 Store found:', { id: store.id, ubiqfy_sandbox: store.ubiqfy_sandbox });
+
+      const products = await this.ubiqfyProductsService.findProductsByEnvironment(store.ubiqfy_sandbox);
+
+      console.log('📦 Products found:', products.length);
+      console.log('🔍 First product sample:', products[0] ? {
+        id: products[0].id,
+        product_code: products[0].product_code,
+        name: products[0].name,
+        is_sandbox: products[0].is_sandbox,
+        optionsCount: products[0].options?.length || 0
+      } : 'No products');
+
+      // Extract distinct countries similar to fetchUbiqfyProducts
+      const distinctCountries = [
+        ...new Set(
+          products
+            .map((product) => product.country_iso)
+            .filter((country) => country && country.trim() !== ''),
+        ),
+      ].sort();
+
+      const responseData = {
+        message: 'Cached products loaded successfully',
+        success: true,
+        data: {
+          success: true,
+          products: products,
+          savedProducts: products.length,
+          message: 'Products loaded from database',
+          metadata: {
+            productTypeCode: 'Voucher', // Default, since we don't store this
+            productCount: products.length,
+            savedToDatabase: products.length,
+            distinctCountries: distinctCountries,
+          },
+        },
+      };
+
+      console.log('📤 Sending response:', {
+        success: responseData.success,
+        productCount: responseData.data.products.length,
+        distinctCountries: responseData.data.metadata.distinctCountries.length
+      });
+
+      return responseData;
+    } catch (error) {
+      throw new HttpException(
+        `Failed to load cached products: ${error.message}`,
         HttpStatus.BAD_REQUEST,
       );
     }

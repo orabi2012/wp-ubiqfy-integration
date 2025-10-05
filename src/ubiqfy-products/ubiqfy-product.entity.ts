@@ -5,10 +5,14 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { UbiqfyProductOption } from './ubiqfy-product-option.entity';
 import { wpStoreProduct } from '../wp-stores/wp-store-products.entity';
 
+// Mirror DB unique constraint added via migration 1730723000000
+// Ensures TypeORM metadata knows about (product_code, is_sandbox) uniqueness
+@Index('UQ_ubiqfy_products_code_env', ['product_code', 'is_sandbox'], { unique: true })
 @Entity('ubiqfy_products')
 export class UbiqfyProduct {
   @PrimaryGeneratedColumn('uuid')

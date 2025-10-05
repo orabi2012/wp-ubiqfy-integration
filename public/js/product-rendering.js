@@ -60,6 +60,7 @@ function renderFilteredProducts(products) {
         }
 
     } catch (error) {
+        console.error('Error rendering products:', error);
         const productsContainer = document.getElementById('productsContainer');
         const noProductsMessage = document.getElementById('noProductsMessage');
         if (productsContainer) {
@@ -72,10 +73,6 @@ function renderFilteredProducts(products) {
  * Create product card HTML element
  */
 function createProductCard(product, index) {
-    const productCard = document.createElement('div');
-    productCard.className = 'col-12 mb-4';
-    productCard.setAttribute('data-country', product.CountryIso);
-
     const productName = product.Name || product.Description || 'Unknown Product';
     const productCode = product.ProductCode || 'N/A';
     const currencyCode = product.CurrencyCode || 'N/A';
@@ -85,6 +82,11 @@ function createProductCard(product, index) {
     const productDescription = product.ProductDescription || product.Description || 'No description available';
     const productLogo = product.ProductLogo || null;
     const productOptions = product.ProductOptionsList || [];
+
+    const productCard = document.createElement('div');
+    productCard.className = 'col-12 mb-4';
+    productCard.setAttribute('data-country', product.CountryIso);
+    productCard.setAttribute('data-product-code', productCode);
 
     // Validate and fix image URL
     const validImageUrl = validateImageUrl(productLogo);
@@ -178,6 +180,19 @@ function createProductOptionsHtml(product, productOptions, index, countryIso, cu
 /**
  * Create individual option HTML
  */
+function safeNumber(value, fallback = 0) {
+    if (typeof value === 'number' && !isNaN(value)) {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const parsed = parseFloat(value);
+        if (!isNaN(parsed)) {
+            return parsed;
+        }
+    }
+    return fallback;
+}
+
 function createOptionHtml(product, option, optionIndex, countryIso) {
     const baseName = option.Name || option.Description || `Option ${optionIndex + 1}`;
     const optionName = `${baseName} (${countryIso})`;
@@ -188,41 +203,40 @@ function createOptionHtml(product, option, optionIndex, countryIso) {
     let originalPriceUSD = 0;
     let faceValue = 'N/A';
     if (option.MinMaxRangeValue) {
-        originalPriceUSD = option.MinMaxRangeValue.MinValue || option.MinMaxRangeValue.MaxValue || 0;
+        originalPriceUSD = safeNumber(option.MinMaxRangeValue.MinValue || option.MinMaxRangeValue.MaxValue, 0);
     }
 
     // Get face value from MinMaxFaceRangeValue
     if (option.MinMaxFaceRangeValue) {
-        faceValue = option.MinMaxFaceRangeValue.MinFaceValue || option.MinMaxFaceRangeValue.MaxFaceValue || 'N/A';
-        if (faceValue !== 'N/A') {
-            faceValue = parseFloat(faceValue);
-        }
+        const faceRaw = option.MinMaxFaceRangeValue.MinFaceValue || option.MinMaxFaceRangeValue.MaxFaceValue;
+        const faceNum = safeNumber(faceRaw, NaN);
+        faceValue = isNaN(faceNum) ? 'N/A' : faceNum;
     }
 
     // Calculate store currency price
-    const conversionRate = parseFloat(window.storeData?.currency_conversion_rate) || 3.75;
+    const conversionRate = safeNumber(window.storeData?.currency_conversion_rate, 3.75);
     const storeCurrencyCode = window.storeData?.wp_currency || 'SAR';
 
     // Calculate wholesale price from MinWholesaleValue if available, otherwise calculate from MinValue and discount
     let wholesalePriceUSD = 0;
-    if (option.MinMaxRangeValue && option.MinMaxRangeValue.MinWholesaleValue) {
-        wholesalePriceUSD = option.MinMaxRangeValue.MinWholesaleValue;
+    if (option.MinMaxRangeValue && option.MinMaxRangeValue.MinWholesaleValue !== undefined && option.MinMaxRangeValue.MinWholesaleValue !== null) {
+        wholesalePriceUSD = safeNumber(option.MinMaxRangeValue.MinWholesaleValue, 0);
     } else {
         // Calculate: MinValue - (MinValue × Discount)
-        const discount = parseFloat(product.Discount || 0);
+        const discount = safeNumber(product.Discount, 0);
         wholesalePriceUSD = originalPriceUSD - (originalPriceUSD * discount);
     }
 
-    const storeCurrencyPrice = wholesalePriceUSD * conversionRate;
-    const retailPriceInStoreCurrency = originalPriceUSD * conversionRate;
+    const storeCurrencyPrice = safeNumber(wholesalePriceUSD * conversionRate, 0);
+    const retailPriceInStoreCurrency = safeNumber(originalPriceUSD * conversionRate, 0);
 
     // Get initial markup percentage from product discount (discount * 100)
-    const initialMarkupPercentage = parseFloat(product.Discount || 0) * 100;
+    const initialMarkupPercentage = safeNumber(product.Discount, 0) * 100;
 
     // Ensure calculated values are valid numbers and rounded
-    const validStoreCurrencyPrice = isNaN(storeCurrencyPrice) ? 0 : storeCurrencyPrice;
-    const validRetailPriceInStoreCurrency = isNaN(retailPriceInStoreCurrency) ? 0 : retailPriceInStoreCurrency;
-    const validInitialMarkupPercentage = isNaN(initialMarkupPercentage) ? 0 : initialMarkupPercentage;
+    const validStoreCurrencyPrice = safeNumber(storeCurrencyPrice, 0);
+    const validRetailPriceInStoreCurrency = safeNumber(retailPriceInStoreCurrency, 0);
+    const validInitialMarkupPercentage = safeNumber(initialMarkupPercentage, 0);
 
     // Check if option exists in database
     const storedOption = (window.storedOptionsData && window.storedOptionsData[optionCode]) ? window.storedOptionsData[optionCode] : null;

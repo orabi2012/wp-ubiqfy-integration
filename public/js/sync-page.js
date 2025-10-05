@@ -11,21 +11,19 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initialize option checkbox visual states
     initializeOptionCheckboxStates();
 
-    console.log('Sync page loaded, store data:', window.storeData);
+    // Note: loadCachedProducts() will be called from initializeStoreData() 
+    // after store data is available from the template
+
 });
 
 // Listen for store data ready event
 document.addEventListener('storeDataReady', function (event) {
     const storeData = event.detail;
-    console.log('Store data received:', storeData);
-
     // Initialize global variables
     storeId = storeData.id;
     conversionRate = storeData.currency_conversion_rate;
     wpCurrency = storeData.wp_currency;
     ubiqfyCurrency = storeData.ubiqfy_currency;
-
-    console.log('Store variables initialized:', { storeId, conversionRate, wpCurrency, ubiqfyCurrency });
 });
 
 /**
@@ -42,11 +40,16 @@ function initializeStoreData(storeData) {
 
     // If conversion rate changed, recalculate markups for existing options
     if (oldConversionRate && oldConversionRate !== conversionRate) {
-        console.log(`💱 Currency rate changed from ${oldConversionRate} to ${conversionRate}`);
         if (typeof recalculateAllMarkupsForCurrencyChange === 'function') {
             recalculateAllMarkupsForCurrencyChange();
         }
     }
+
+    // Auto-load cached products after store data is initialized
+    // Add small delay to ensure all scripts are loaded
+    setTimeout(() => {
+        loadCachedProducts();
+    }, 100);
 }
 
 /**
@@ -325,21 +328,6 @@ async function fetchUbiqfyProducts() {
         });
 
         if (response.ok && result.success) {
-            console.log('🎯 DEBUG: Raw product data received:', result.data);
-
-            // Check for image URLs in the raw data
-            if (result.data.products && result.data.products.length > 0) {
-                console.log('📷 DEBUG: Image analysis of first 3 products:');
-                result.data.products.slice(0, 3).forEach((product, index) => {
-                    console.log(`Product ${index + 1}:`, {
-                        ProductCode: product.ProductCode,
-                        ProductLogo: product.ProductLogo,
-                        hasLogo: !!product.ProductLogo,
-                        logoType: typeof product.ProductLogo
-                    });
-                });
-            }
-
             const filteringResult = displayProductsOnScreen(result.data);
 
             // Get proper counts from actual data, not metadata
@@ -428,6 +416,152 @@ async function fetchUbiqfyProducts() {
 }
 
 /**
+ * Load cached products from database (no API call to Ubiqfy)
+ */
+async function loadCachedProducts() {
+    // Ensure storeId is available
+    if (!storeId && window.storeData) {
+        initializeStoreData(window.storeData);
+    }
+
+    if (!storeId) {
+        return;
+    }
+
+    try {
+        const { response, result } = await apiCall(`/wp-stores/${storeId}/products`, {
+            method: 'GET'
+        });
+
+        if (response.ok && result.success && result.data.products && result.data.products.length > 0) {
+            // Convert database products to API format for displayProductsOnScreen
+            const apiFormatData = {
+                products: result.data.products.map(product => ({
+                    ProductCode: product.product_code,
+                    Name: product.name,
+                    ProviderCode: product.provider_code,
+                    Description: product.description,
+                    ProductDescription: product.product_description,
+                    ProductLogo: product.logo_url,
+                    BrandLogo: product.brand_logo_url,
+                    TermsUrl: product.terms_url,
+                    PrivacyUrl: product.privacy_url,
+                    ReedemUrl: product.reedem_url,
+                    Notes: product.notes,
+                    ReedemDesc: product.reedem_desc,
+                    ReceiptMessage: product.receipt_message,
+                    NextMethodCall: product.next_method_call,
+                    IsVoucher: product.is_voucher,
+                    IsTransationCancelabled: product.is_transaction_cancelabled,
+                    CountryIso: product.country_iso,
+                    CurrencyCode: product.currency_code,
+                    ProductCurrencyCode: product.product_currency_code,
+                    Discount: product.discount,
+                    ProductUrl: product.product_url,
+                    TermsConditions: product.terms_conditions,
+                    ProductOptionsList: product.options ? product.options.map(option => ({
+                        ProductOptionCode: option.product_option_code,
+                        Name: option.name,
+                        EanSkuUpc: option.ean_sku_upc,
+                        Description: option.description,
+                        Logo: option.logo_url,
+                        MinMaxFaceRangeValue: {
+                            MinFaceValue: option.min_face_value,
+                            MaxFaceValue: option.max_face_value
+                        },
+                        MinMaxRangeValue: {
+                            MinValue: option.min_value,
+                            MaxValue: option.max_value,
+                            MinWholesaleValue: option.min_wholesale_value,
+                            MaxWholesaleValue: option.max_wholesale_value
+                        }
+                    })) : []
+                })),
+                metadata: result.data.metadata
+            };
+
+            displayProductsOnScreen(apiFormatData);
+
+            // Show a subtle indication that these are cached products
+            const productTypeLabel = document.getElementById('productTypeLabel');
+            if (productTypeLabel) {
+                productTypeLabel.innerHTML = `<i class="fas fa-database me-1"></i>Cached Products`;
+            }
+        } else {
+            // Show empty state
+            showEmptyProductsState();
+        }
+    } catch (error) {
+        // Show empty state on error
+        showEmptyProductsState();
+    }
+}
+
+/**
+ * Show empty products state
+ */
+function showEmptyProductsState() {
+    const productsCard = document.getElementById('productsCard');
+    const noProductsMessage = document.getElementById('noProductsMessage');
+
+    if (productsCard && noProductsMessage) {
+        productsCard.style.display = 'block';
+        noProductsMessage.style.display = 'block';
+    }
+}
+
+/**
+ * Simple fallback product list when renderFilteredProducts is not available
+ */
+function showSimpleProductList(products) {
+    const productsContainer = document.getElementById('productsContainer');
+    if (!productsContainer) return;
+
+    let html = `
+        <div class="alert alert-info" role="alert">
+            <h5 class="alert-heading">📦 Products Loaded from Cache</h5>
+            <p>Found ${products.length} products. The full rendering system is loading...</p>
+            <hr>
+            <button class="btn btn-primary" onclick="window.location.reload()">
+                <i class="fas fa-refresh"></i> Refresh Page
+            </button>
+            <button class="btn btn-success ms-2" onclick="fetchUbiqfyProducts()">
+                <i class="fas fa-download"></i> Fetch Fresh Products
+            </button>
+        </div>
+        <div class="row">
+    `;
+
+    products.slice(0, 10).forEach(product => {
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">${product.Name || 'Unknown Product'}</h6>
+                        <p class="text-muted small">Code: ${product.ProductCode}</p>
+                        <p class="text-muted small">Country: ${product.CountryIso}</p>
+                        <p class="text-muted small">Options: ${product.ProductOptionsList?.length || 0}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    if (products.length > 10) {
+        html += `
+            <div class="col-12">
+                <div class="alert alert-secondary text-center">
+                    <p>Showing first 10 of ${products.length} products. Refresh the page to see all products with full functionality.</p>
+                </div>
+            </div>
+        `;
+    }
+
+    html += `</div>`;
+    productsContainer.innerHTML = html;
+}
+
+/**
  * Filter products to only include fixed-price options (not price ranges)
  * For each product, filters out options where MinValue !== MaxValue
  * Only removes entire products if ALL options have price ranges
@@ -436,7 +570,6 @@ function filterFixedPriceProducts(products) {
     return products.map(product => {
         // If no options, return product as-is
         if (!product.ProductOptionsList || product.ProductOptionsList.length === 0) {
-            console.log(`ℹ️ Product ${product.ProductCode} has no options - keeping as-is`);
             return product;
         }
 
@@ -444,19 +577,12 @@ function filterFixedPriceProducts(products) {
         const originalOptionsCount = product.ProductOptionsList.length;
         const filteredOptions = product.ProductOptionsList.filter(option => {
             if (!option.MinMaxRangeValue) {
-                console.log(`⚠️ Option ${option.Code || 'unknown'} has no MinMaxRangeValue - keeping`);
                 return true; // Keep options without price range data
             }
 
             const minValue = option.MinMaxRangeValue.MinValue || 0;
             const maxValue = option.MinMaxRangeValue.MaxValue || 0;
             const isFixedPrice = minValue === maxValue;
-
-            if (!isFixedPrice) {
-                console.log(`❌ Filtering out option ${option.Code || 'unknown'} from product ${product.ProductCode}: price range (${minValue} - ${maxValue})`);
-            } else {
-                console.log(`✅ Keeping option ${option.Code || 'unknown'} from product ${product.ProductCode}: fixed price (${minValue})`);
-            }
 
             return isFixedPrice;
         });
@@ -466,17 +592,10 @@ function filterFixedPriceProducts(products) {
         filteredProduct.ProductOptionsList = filteredOptions;
 
         const removedOptionsCount = originalOptionsCount - filteredOptions.length;
-        if (removedOptionsCount > 0) {
-            console.log(`� Product ${product.ProductCode}: removed ${removedOptionsCount}/${originalOptionsCount} price range options`);
-        }
-
         return filteredProduct;
     }).filter(product => {
         // Remove products that have no options left after filtering
         const hasValidOptions = product.ProductOptionsList && product.ProductOptionsList.length > 0;
-        if (!hasValidOptions) {
-            console.log(`🚫 Removing product ${product.ProductCode} - no fixed-price options available`);
-        }
         return hasValidOptions || !product.ProductOptionsList; // Keep products without options list
     });
 }
@@ -529,22 +648,13 @@ async function displayProductsOnScreen(data) {
         totalFilteredOptionsCount = originalOptionsCount - remainingOptionsCount;
         const filteredProductCount = originalProductCount - filteredProducts.length;
 
-        console.log(`📋 Filtering results: ${filteredProducts.length}/${originalProductCount} products, ${remainingOptionsCount}/${originalOptionsCount} options`);
-
         // Collect all unique countries from filtered products
         const countries = new Set();
-        console.log('🌍 Collecting countries from filtered products...');
-        filteredProducts.forEach((product, index) => {
-            // Use CountryIso which is the correct field name
+        filteredProducts.forEach(product => {
             if (product.CountryIso) {
-                console.log(`Product ${index}: CountryIso = "${product.CountryIso}"`);
                 countries.add(product.CountryIso);
-            } else {
-                console.log(`Product ${index}: No CountryIso found`, product);
             }
         });
-
-        console.log('Unique countries found:', Array.from(countries));
 
         // Populate country filter if there are any countries
         if (countries.size > 0) {
@@ -553,9 +663,28 @@ async function displayProductsOnScreen(data) {
 
         // Render filtered products using the existing function
         if (typeof renderFilteredProducts === 'function') {
-            renderFilteredProducts(filteredProducts);
+            try {
+                renderFilteredProducts(filteredProducts);
+            } catch (error) {
+                console.error('❌ Error in renderFilteredProducts:', error);
+                // Fallback to simple product listing
+                showSimpleProductList(filteredProducts);
+            }
         } else {
-            console.error('renderFilteredProducts function not available');
+            setTimeout(() => {
+                if (typeof renderFilteredProducts === 'function') {
+                    try {
+                        renderFilteredProducts(filteredProducts);
+                    } catch (error) {
+                        console.error('❌ Error in renderFilteredProducts on retry:', error);
+                        showSimpleProductList(filteredProducts);
+                    }
+                } else {
+                    console.error('❌ renderFilteredProducts function still not available after retry');
+                    // Show a simple fallback
+                    showSimpleProductList(filteredProducts);
+                }
+            }, 500);
         }
 
         // Update count label with filtered count
@@ -565,7 +694,7 @@ async function displayProductsOnScreen(data) {
         initializeOptionCheckboxStates();
 
         // Load and mark existing synced products and collect statistics
-        const existingStats = await loadAndMarkExistingProducts();
+        await loadAndMarkExistingProducts();
 
         // Count new vs existing products after marking
         let newProductsCount = 0;
@@ -622,14 +751,10 @@ async function displayProductsOnScreen(data) {
  * Populate country filter checkboxes
  */
 function populateCountryFilter(countries) {
-    console.log('🏳️ Populating country filter with countries:', countries);
-
     const countryCheckboxes = document.getElementById('countryCheckboxes');
     countryCheckboxes.innerHTML = '';
 
     countries.sort().forEach(country => {
-        console.log(`Creating checkbox for country: "${country}"`);
-
         const checkboxDiv = document.createElement('div');
         checkboxDiv.className = 'form-check form-check-inline';
 
@@ -660,7 +785,6 @@ function populateCountryFilter(countries) {
     setTimeout(() => {
         const visibleProducts = document.querySelectorAll('.col-12.mb-4:not([style*="display: none"])').length;
         document.getElementById('filteredProductCount').textContent = visibleProducts;
-        console.log(`Initial visible products: ${visibleProducts}`);
     }, 100);
 }
 
@@ -728,14 +852,10 @@ function updateCountryFilterCounters() {
  */
 async function loadAndMarkExistingProducts() {
     if (!storeId) {
-        console.log('Store ID not available, skipping existing products check');
         return;
     }
 
     try {
-        console.log('🔍 Loading existing synced products and stored options...');
-
-        // Load both synced products and stored options
         const [syncedResponse, storedOptionsResponse] = await Promise.all([
             apiCall(`/wp-stores/${storeId}/synced-products`),
             apiCall(`/wp-stores/${storeId}/stored-options`)
@@ -744,53 +864,42 @@ async function loadAndMarkExistingProducts() {
         const syncedProducts = [];
         const storedOptionsMap = {};
 
-        // Process synced products response
         if (syncedResponse.response.ok && syncedResponse.result.success) {
             syncedProducts.push(...(syncedResponse.result.data.products || []));
-            console.log('Synced products:', syncedProducts);
         }
 
-        // Process stored options response - this comes as an object map
         if (storedOptionsResponse.response.ok && storedOptionsResponse.result.success) {
             Object.assign(storedOptionsMap, storedOptionsResponse.result.data || {});
-            console.log('Stored options map:', storedOptionsMap);
         }
 
-        console.log(`Found ${syncedProducts.length} synced products and ${Object.keys(storedOptionsMap).length} stored options`);
-
-        // Mark synced products first (higher priority)
         syncedProducts.forEach(product => {
             markProductAsSynced(product.productCode, product.optionCode);
         });
 
-        // Load stored options (only select the specific options that are in DB)
-        Object.entries(storedOptionsMap).forEach(([optionCode, optionData]) => {
-            // Set flag to prevent database updates during loading
-            if (typeof window !== 'undefined') {
-                window.isLoadingExistingData = true;
-            }
+        const storedOptionEntries = Object.entries(storedOptionsMap);
 
-            // Only select the specific option checkbox, not the product
+        if (storedOptionEntries.length > 0 && typeof window !== 'undefined') {
+            window.isLoadingExistingData = true;
+        }
+
+        storedOptionEntries.forEach(([optionCode, optionData]) => {
             selectStoredOption(optionCode);
-
-            // Load the custom pricing from database
             loadCustomPriceForOption(optionCode, optionData);
         });
 
-        // Clear the loading flag after a short delay to allow all operations to complete
-        setTimeout(() => {
-            if (typeof window !== 'undefined') {
-                window.isLoadingExistingData = false;
-            }
-        }, 2000);
+        if (storedOptionEntries.length > 0) {
+            setTimeout(() => {
+                if (typeof window !== 'undefined') {
+                    window.isLoadingExistingData = false;
+                }
+            }, 2000);
+        }
 
-        // Update counters after marking
         setTimeout(() => {
             if (typeof updateSelectedCount === 'function') {
                 updateSelectedCount();
             }
         }, 100);
-
     } catch (error) {
         console.error('Error loading existing products:', error);
     }
@@ -800,39 +909,30 @@ async function loadAndMarkExistingProducts() {
  * Mark a product as already synced to wp
  */
 function markProductAsSynced(productCode, optionCode = null) {
-    let checkbox;
-    if (optionCode) {
-        // Find specific option checkbox by data-option-code
-        checkbox = document.querySelector(`.option-checkbox[data-option-code="${optionCode}"]`);
-    } else {
-        // Find product checkbox by value
-        checkbox = document.querySelector(`.product-checkbox[value="${productCode}"]`);
+    const checkbox = optionCode
+        ? document.querySelector(`.option-checkbox[data-option-code="${optionCode}"]`)
+        : document.querySelector(`.product-checkbox[value="${productCode}"]`);
+
+    if (!checkbox) {
+        return;
     }
 
-    if (checkbox) {
-        const card = checkbox.closest('.col-12, .card');
-        if (card) {
-            // Add synced styling classes
-            card.classList.add('product-synced', 'newly-marked');
-            card.classList.remove('product-stored'); // Remove stored class if present
-
-            // Add synced badge
-            addSyncedBadgeToCard(card);
-
-            // Auto-select the checkbox
-            checkbox.checked = true;
-
-            // Trigger change event to update UI
-            checkbox.dispatchEvent(new Event('change'));
-
-            // Remove animation class after animation completes
-            setTimeout(() => {
-                card.classList.remove('newly-marked');
-            }, 600);
-        }
-    } else {
-        console.log(`⚠️ Checkbox not found for productCode: ${productCode}, optionCode: ${optionCode}`);
+    const card = checkbox.closest('.col-12, .card');
+    if (!card) {
+        return;
     }
+
+    card.classList.add('product-synced', 'newly-marked');
+    card.classList.remove('product-stored');
+
+    addSyncedBadgeToCard(card);
+
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change'));
+
+    setTimeout(() => {
+        card.classList.remove('newly-marked');
+    }, 600);
 }
 
 /**
@@ -840,20 +940,14 @@ function markProductAsSynced(productCode, optionCode = null) {
  * Only selects the option checkbox, doesn't add badges or mark the product card
  */
 function selectStoredOption(optionCode) {
-    // Find the specific option checkbox by data-option-code
     const optionCheckbox = document.querySelector(`.option-checkbox[data-option-code="${optionCode}"]`);
 
-    if (optionCheckbox) {
-        // Auto-select the option checkbox
-        optionCheckbox.checked = true;
-
-        // Trigger change event to update UI and counters
-        optionCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-
-        console.log(`✅ Selected stored option: ${optionCode}`);
-    } else {
-        console.log(`⚠️ Option checkbox not found for stored option: ${optionCode}`);
+    if (!optionCheckbox) {
+        return;
     }
+
+    optionCheckbox.checked = true;
+    optionCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 /**
@@ -879,95 +973,66 @@ function addSyncedBadgeToCard(card) {
  * Load custom price for an option from database and populate the UI
  */
 function loadCustomPriceForOption(optionCode, optionData) {
-    console.log(`💰 Loading custom price for option: ${optionCode}`, optionData);
-
-    // Find the option checkbox by data-option-code attribute
     const optionCheckbox = document.querySelector(`.option-checkbox[data-option-code="${optionCode}"]`);
     if (!optionCheckbox) {
-        console.log(`⚠️ Option checkbox not found for: ${optionCode}`);
         return;
     }
 
-    // Find the option card container (the card that contains this checkbox)
     const optionCard = optionCheckbox.closest('.option-card');
     if (!optionCard) {
-        console.log(`⚠️ Option card not found for: ${optionCode}`);
         return;
     }
 
-    // Set the option ID from database for future updates
     if (optionData.id) {
         optionCard.setAttribute('data-option-id', optionData.id);
-        console.log(`🔗 Set option ID for ${optionCode}: ${optionData.id}`);
     }
 
-    // Find and populate the custom price input
     const customPriceInput = optionCard.querySelector('.custom-price-input');
     if (customPriceInput && optionData.customPrice !== null && optionData.customPrice !== undefined) {
         const customPrice = parseFloat(optionData.customPrice);
         if (!isNaN(customPrice)) {
             customPriceInput.value = customPrice.toFixed(2);
-            console.log(`✅ Set custom price for ${optionCode}: ${customPrice}`);
         }
     }
 
-    // Find and populate the markup input
     const markupInput = optionCard.querySelector('.markup-input');
     if (markupInput && optionData.markupPercentage !== null && optionData.markupPercentage !== undefined) {
-        // Instead of using stored markup, recalculate based on current custom price and conversion rate
-        const customPriceInput = optionCard.querySelector('.custom-price-input');
-        if (customPriceInput && optionData.customPrice !== null && optionData.customPrice !== undefined) {
-            const customPrice = parseFloat(optionData.customPrice);
+        const customPrice = optionData.customPrice !== null && optionData.customPrice !== undefined
+            ? parseFloat(optionData.customPrice)
+            : NaN;
 
-            // Get original pricing data
-            const originalRetailPrice = parseFloat(customPriceInput.getAttribute('data-original-price')) || 0;
-            const originalDiscount = parseFloat(customPriceInput.getAttribute('data-original-discount')) || 0;
-
-            // Calculate wholesale price with current conversion rate
+        if (!isNaN(customPrice)) {
+            const originalRetailPrice = parseFloat(customPriceInput?.getAttribute('data-original-price')) || 0;
+            const originalDiscount = parseFloat(customPriceInput?.getAttribute('data-original-discount')) || 0;
             const wholesalePriceUSD = originalRetailPrice - (originalRetailPrice * originalDiscount);
             const currentConversionRate = window.storeData?.currency_conversion_rate || 3.75;
             const wholesalePriceStore = wholesalePriceUSD * currentConversionRate;
 
-            // Recalculate markup based on current custom price
-            if (wholesalePriceStore > 0 && !isNaN(customPrice)) {
+            if (wholesalePriceStore > 0) {
                 const difference = customPrice - wholesalePriceStore;
                 const recalculatedMarkup = (difference / wholesalePriceStore) * 100;
                 markupInput.value = recalculatedMarkup.toFixed(2);
-                console.log(`✅ Recalculated markup for ${optionCode}: ${recalculatedMarkup.toFixed(2)}% (was ${optionData.markupPercentage}%)`);
-            } else {
-                // Fallback to stored value if calculation fails
-                const markupPercentage = parseFloat(optionData.markupPercentage);
-                if (!isNaN(markupPercentage)) {
-                    markupInput.value = markupPercentage.toFixed(2);
-                    console.log(`✅ Used stored markup for ${optionCode}: ${markupPercentage}%`);
-                }
             }
-        } else {
-            // Fallback to stored value if no custom price found
+        }
+
+        if (!markupInput.value) {
             const markupPercentage = parseFloat(optionData.markupPercentage);
             if (!isNaN(markupPercentage)) {
                 markupInput.value = markupPercentage.toFixed(2);
-                console.log(`✅ Used stored markup for ${optionCode}: ${markupPercentage}%`);
             }
         }
     }
 
-    // Find and update the final price display
     const finalPriceDisplay = optionCard.querySelector('.final-price-display');
     if (finalPriceDisplay && optionData.customPrice !== null && optionData.customPrice !== undefined) {
         const customPrice = parseFloat(optionData.customPrice);
         if (!isNaN(customPrice)) {
             finalPriceDisplay.textContent = `${customPrice.toFixed(2)} ${wpCurrency || 'SAR'}`;
-            console.log(`✅ Set final price display for ${optionCode}: ${customPrice}`);
         }
     }
 
-    // Update visual indicators and ensure consistency
     const priceInput = optionCard.querySelector('.custom-price-input');
     if (priceInput && typeof updateFinalPriceWithBinding === 'function') {
         updateFinalPriceWithBinding(priceInput, true);
     }
-
-    // Visual updates are handled by the existing pricing system
-    console.log(`✅ Loaded custom price data for existing option: ${optionCode}`);
 }

@@ -202,6 +202,14 @@ export class UbiqfyProductsService {
     });
   }
 
+  async findProductsByEnvironment(isSandbox: boolean): Promise<UbiqfyProduct[]> {
+    return await this.ubiqfyProductRepo.find({
+      where: { is_sandbox: isSandbox },
+      relations: ['options'],
+      order: { created_at: 'DESC' },
+    });
+  }
+
   async findProductById(id: string): Promise<UbiqfyProduct | null> {
     return await this.ubiqfyProductRepo.findOne({
       where: { id },
