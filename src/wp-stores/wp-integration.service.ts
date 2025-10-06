@@ -57,27 +57,7 @@ export class wpIntegrationService {
     };
   }
 
-  /**
-   * Get the wp client ID from environment variables (legacy - can be removed)
-   */
-  private getwpClientId(): string {
-    const clientId = process.env.wp_CLIENT_ID;
-    if (!clientId) {
-      throw new Error('wp_CLIENT_ID environment variable is required');
-    }
-    return clientId;
-  }
 
-  /**
-   * Get the wp client secret from environment variables
-   */
-  private getwpClientSecret(): string {
-    const clientSecret = process.env.wp_CLIENT_SECRET;
-    if (!clientSecret) {
-      throw new Error('wp_CLIENT_SECRET environment variable is required');
-    }
-    return clientSecret;
-  }
 
   async syncProductsTowp(storeId: string): Promise<{
     categories: any[];
@@ -218,7 +198,7 @@ export class wpIntegrationService {
     };
 
     // Cache for country subcategories to avoid duplicates
-    // Key: "mainCategoryId-countryIso", Value: subcategory object
+    // Key: "mainCategoryId-countrySlug", Value: subcategory object
     const countrySubcategoriesCache = new Map<string, wpCategory>();
 
     // Also create a persistent cache by querying existing wp categories
@@ -233,10 +213,10 @@ export class wpIntegrationService {
         `📋 Pre-loaded ${existingwpCategories.length} existing wp categories`,
       );
 
-      // Pre-populate cache with existing subcategories
+      // Pre-populate cache with existing subcategories using slugs
       existingwpCategories.forEach((category) => {
         if (category.parent) {
-          const cacheKey = `${category.parent}-${category.name}`;
+          const cacheKey = `${category.parent}-${category.slug}`;
           countrySubcategoriesCache.set(cacheKey, category);
           console.log(
             `📋 Pre-cached existing subcategory: ${cacheKey} (ID: ${category.id})`,
@@ -327,7 +307,7 @@ export class wpIntegrationService {
         let mainCategoryId = storeProduct.wp_category_id;
 
         if (!mainCategoryId) {
-          // Create/Get main category from wp (no cache needed for main categories)
+          // Create/Get main category from wp
           const mainCategory = await this.createOrGetCategory(store, {
             name: ubiqfyProduct.name,
             image: ubiqfyProduct.logo_url,
@@ -349,10 +329,41 @@ export class wpIntegrationService {
           console.log(
             `📂 Using stored main category ID ${mainCategoryId} for product ${ubiqfyProduct.name}`,
           );
+
+          // Verify the stored category still exists in WooCommerce and update if needed
+          try {
+            const verifyResponse = await axios.get(
+              `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/categories/${mainCategoryId}`,
+              { headers: this.getWooCommerceHeaders(store) }
+            );
+            console.log(`✅ Verified stored main category ${mainCategoryId} still exists in WooCommerce`);
+          } catch (error) {
+            if (error.response?.status === 404) {
+              console.log(`⚠️  Stored main category ${mainCategoryId} no longer exists, creating new one`);
+              // Clear the stored ID and create new category
+              const mainCategory = await this.createOrGetCategory(store, {
+                name: ubiqfyProduct.name,
+                image: ubiqfyProduct.logo_url,
+                description: ubiqfyProduct.description,
+              });
+
+              results.categories.push(mainCategory);
+              mainCategoryId = mainCategory.id.toString();
+
+              // Update with new category ID
+              await this.storeProductRepository.update(storeProduct.id, {
+                wp_category_id: mainCategoryId,
+              });
+
+              console.log(
+                `✅ Updated wp main category ID to ${mainCategoryId} for product ${ubiqfyProduct.name}`,
+              );
+            }
+          }
         }
 
         // 2. Create/Get Country Subcategory if country_iso exists
-        let categoryId = mainCategoryId; // Default to main category
+        let categoryIds: number[] = [parseInt(mainCategoryId)]; // Always include main category
         let countrySubcategoryId: string | null = null;
 
         if (
@@ -363,7 +374,10 @@ export class wpIntegrationService {
 
           if (!countrySubcategoryId) {
             // Check cache first to avoid creating duplicate subcategories
-            const cacheKey = `${mainCategoryId}-${ubiqfyProduct.country_iso}`;
+            const countrySlug = ubiqfyProduct.country_iso.toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '');
+            const cacheKey = `${mainCategoryId}-${countrySlug}`;
             let countrySubcategory = countrySubcategoriesCache.get(cacheKey);
 
             if (!countrySubcategory) {
@@ -414,9 +428,66 @@ export class wpIntegrationService {
             console.log(
               `📂 Using stored country subcategory ID ${countrySubcategoryId} for product ${ubiqfyProduct.name} (${ubiqfyProduct.country_iso})`,
             );
+
+            // Verify the stored subcategory still exists in WooCommerce and update if needed
+            try {
+              const verifyResponse = await axios.get(
+                `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/categories/${countrySubcategoryId}`,
+                { headers: this.getWooCommerceHeaders(store) }
+              );
+              console.log(`✅ Verified stored country subcategory ${countrySubcategoryId} still exists in WooCommerce`);
+            } catch (error) {
+              if (error.response?.status === 404) {
+                console.log(`⚠️  Stored country subcategory ${countrySubcategoryId} no longer exists, creating new one`);
+                // Clear the stored ID and create new subcategory
+                const countrySlug = ubiqfyProduct.country_iso.toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '-')
+                  .replace(/^-+|-+$/g, '');
+                const cacheKey = `${mainCategoryId}-${countrySlug}`;
+
+                const countrySubcategory = await this.createOrGetCategory(
+                  store,
+                  {
+                    name: `${ubiqfyProduct.country_iso}`,
+                    parent: parseInt(mainCategoryId),
+                    description: `Products for ${ubiqfyProduct.country_iso}`,
+                  },
+                  countrySubcategoriesCache,
+                );
+
+                // Cache the subcategory for future use in this sync session
+                countrySubcategoriesCache.set(cacheKey, countrySubcategory);
+
+                // Only add to results if it's newly created (avoid duplicates in results)
+                if (
+                  !results.categories.find((c) => c.id === countrySubcategory.id)
+                ) {
+                  results.categories.push(countrySubcategory);
+                }
+
+                countrySubcategoryId = countrySubcategory.id.toString();
+
+                // Update with new subcategory ID
+                await this.storeProductRepository.update(storeProduct.id, {
+                  wp_country_subcategory_id: countrySubcategoryId,
+                });
+
+                console.log(
+                  `✅ Updated wp country subcategory ID to ${countrySubcategoryId} for product ${ubiqfyProduct.name} (${ubiqfyProduct.country_iso})`,
+                );
+              }
+            }
           }
 
-          categoryId = countrySubcategoryId;
+          // Add country subcategory to the categories array
+          categoryIds.push(parseInt(countrySubcategoryId));
+          console.log(
+            `📂 Product will be linked to both main category (${mainCategoryId}) and country subcategory (${countrySubcategoryId})`,
+          );
+        } else {
+          console.log(
+            `📂 Product will be linked to main category only (${mainCategoryId}) - no country specified`,
+          );
         }
 
         // 2. Create Products from Product Options
@@ -469,7 +540,7 @@ export class wpIntegrationService {
               const wpProduct = await this.createwpProduct(
                 store,
                 {
-                  categoryId: parseInt(categoryId),
+                  categoryIds: categoryIds,
                   option: option,
                   storedOption: storedOption, // Pass the stored option with pricing
                   storeProduct: storeProduct,
@@ -573,28 +644,33 @@ export class wpIntegrationService {
   ): Promise<wpCategory> {
     const headers = this.getWooCommerceHeaders(store);
 
+    // Generate slug from name for consistent searching
+    const categorySlug = categoryData.name.toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
     // First, check the cache if provided (for subcategories)
     if (cache && categoryData.parent) {
-      const cacheKey = `${categoryData.parent}-${categoryData.name}`;
+      const cacheKey = `${categoryData.parent}-${categorySlug}`;
       const cachedCategory = cache.get(cacheKey);
       if (cachedCategory) {
         console.log(
-          `✅ Using cached category: ID ${cachedCategory.id}, Name: "${cachedCategory.name}", Parent: ${cachedCategory.parent || 'none'}`,
+          `✅ Using cached category: ID ${cachedCategory.id}, Name: "${cachedCategory.name}", Slug: "${cachedCategory.slug}", Parent: ${cachedCategory.parent || 'none'}`,
         );
         return cachedCategory;
       }
     }
 
-    // Second, check if category already exists via API
+    // Second, check if category already exists via API using slug
     try {
       console.log(
-        `🔍 Searching for existing category: "${categoryData.name}" with parent: ${categoryData.parent || 'none'}`,
+        `🔍 Searching for existing category by slug: "${categorySlug}" with parent: ${categoryData.parent || 'none'}`,
       );
       const existingResponse = await axios.get(
         `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/categories`,
         {
           headers,
-          params: { search: categoryData.name },
+          params: { slug: categorySlug },
         },
       );
 
@@ -602,24 +678,24 @@ export class wpIntegrationService {
       const existingCategories = existingResponse.data || [];
       if (existingCategories.length > 0) {
         console.log(
-          `📋 Found ${existingCategories.length} categories with name "${categoryData.name}"`,
+          `📋 Found ${existingCategories.length} categories with slug "${categorySlug}"`,
         );
         // For subcategories, also check parent matches
         const existing = existingCategories.find(
           (cat) =>
-            cat.name === categoryData.name &&
+            cat.slug === categorySlug &&
             (categoryData.parent
               ? cat.parent === categoryData.parent
               : !cat.parent),
         );
         if (existing) {
           console.log(
-            `✅ Using existing category: ID ${existing.id}, Name: "${existing.name}", Parent: ${existing.parent || 'none'}`,
+            `✅ Using existing category: ID ${existing.id}, Name: "${existing.name}", Slug: "${existing.slug}", Parent: ${existing.parent || 'none'}`,
           );
 
           // Cache it for future use if cache is provided
           if (cache && categoryData.parent) {
-            const cacheKey = `${categoryData.parent}-${categoryData.name}`;
+            const cacheKey = `${categoryData.parent}-${categorySlug}`;
             cache.set(cacheKey, existing);
             console.log(
               `📋 Cached existing category for future use: ${cacheKey}`,
@@ -629,12 +705,12 @@ export class wpIntegrationService {
           return existing;
         } else {
           console.log(
-            `⚠️  Found categories with same name but different parent. Looking for parent: ${categoryData.parent}`,
+            `⚠️  Found categories with same slug but different parent. Looking for parent: ${categoryData.parent}`,
           );
         }
       } else {
         console.log(
-          `📭 No existing categories found with name "${categoryData.name}"`,
+          `📭 No existing categories found with slug "${categorySlug}"`,
         );
       }
     } catch (error) {
@@ -679,7 +755,7 @@ export class wpIntegrationService {
 
       // Cache the newly created category if cache is provided and it's a subcategory
       if (cache && categoryData.parent) {
-        const cacheKey = `${categoryData.parent}-${categoryData.name}`;
+        const cacheKey = `${categoryData.parent}-${categorySlug}`;
         cache.set(cacheKey, response.data);
         console.log(
           `📋 Cached newly created category for future use: ${cacheKey}`,
@@ -730,7 +806,7 @@ export class wpIntegrationService {
   private async createwpProduct(
     store: wpStore,
     productData: {
-      categoryId: number;
+      categoryIds: number[];
       option: any;
       storedOption?: wpStoreProductOption;
       storeProduct: wpStoreProduct;
@@ -740,7 +816,7 @@ export class wpIntegrationService {
     storeCurrency: string,
   ): Promise<wpProduct> {
     const {
-      categoryId,
+      categoryIds,
       option,
       storedOption,
       storeProduct,
@@ -812,7 +888,7 @@ export class wpIntegrationService {
       short_description: `${option.name} - Digital Gift Card`,
       regular_price: finalPrice.toString(),
       sku: `${store.sku_prefix || 'UBQ'}-${option.product_option_code}`, // Add store's custom prefix
-      categories: [{ id: categoryId }], // WooCommerce expects array of objects with id
+      categories: categoryIds.map(id => ({ id })), // WooCommerce expects array of objects with id
       type: 'simple', // WooCommerce product type
       status: 'private', // Keep product hidden until manually published
       virtual: true, // Digital product
@@ -851,7 +927,7 @@ export class wpIntegrationService {
       JSON.stringify(productPayload, null, 2),
     );
     console.log(
-      `�🔗 Product will be linked to category ID: ${categoryId} using categories array`,
+      `🔗 Product will be linked to category IDs: [${categoryIds.join(', ')}] using categories array`,
     );
 
     // Check if product already exists by SKU using cache or API call
@@ -899,9 +975,10 @@ export class wpIntegrationService {
       console.log('📝 Updating existing product:', existingProduct.name);
       console.log('Current product categories:', existingProduct.categories);
 
-      // For existing products, only update pricing to preserve all other settings (stock, categories, etc.)
+      // For existing products, update pricing and ensure correct category assignments
       const updatePayload = {
         regular_price: finalPrice.toString(),
+        categories: categoryIds.map(id => ({ id })), // Ensure product is linked to all required categories
         // Update cost price in meta data
         meta_data: [
           {
@@ -911,7 +988,7 @@ export class wpIntegrationService {
         ]
       };
 
-      console.log('📝 Updating only pricing data:', updatePayload);
+      console.log('📝 Updating pricing and category data:', updatePayload);
 
       try {
         const updateResponse = await axios.put(
