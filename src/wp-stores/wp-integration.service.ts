@@ -814,7 +814,7 @@ export class wpIntegrationService {
       sku: `${store.sku_prefix || 'UBQ'}-${option.product_option_code}`, // Add store's custom prefix
       categories: [{ id: categoryId }], // WooCommerce expects array of objects with id
       type: 'simple', // WooCommerce product type
-      status: 'publish', // Make product active
+      status: 'private', // Keep product hidden until manually published
       virtual: true, // Digital product
       downloadable: false, // Will be managed by WC Key Manager
       manage_stock: true, // Enable stock management
