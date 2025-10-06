@@ -226,6 +226,18 @@ export class UbiqfyProductsService {
     });
   }
 
+  async findOptionByCode(optionCode: string, isSandbox?: boolean): Promise<UbiqfyProductOption | null> {
+    const where: any = { product_option_code: optionCode };
+    if (typeof isSandbox === 'boolean') {
+      where.is_sandbox = isSandbox;
+    }
+
+    return await this.ubiqfyProductOptionRepo.findOne({
+      where,
+      relations: ['product'],
+    });
+  }
+
   async deleteProduct(id: string): Promise<void> {
     await this.ubiqfyProductRepo.delete(id);
   }

@@ -785,12 +785,71 @@ export class wpStoresController {
         };
       }
 
-      // Option doesn't exist - this means the option hasn't been synced from Ubiqfy yet
-      // We can't create it without the full Ubiqfy data
-      throw new HttpException(
-        'Option not found in database. Please fetch products from Ubiqfy first to sync this option.',
-        HttpStatus.NOT_FOUND,
+      // Option doesn't exist - attempt to hydrate it from the cached Ubiqfy catalog
+      const store = await this.wpStoresService.findById(storeId);
+      if (!store) {
+        throw new HttpException('Store not found', HttpStatus.NOT_FOUND);
+      }
+
+      const catalogOption = await this.ubiqfyProductsService.findOptionByCode(
+        optionCode,
+        store.ubiqfy_sandbox,
       );
+
+      if (!catalogOption || !catalogOption.product) {
+        throw new HttpException(
+          'Option not found in cached catalog. Please fetch products from Ubiqfy to refresh the cache.',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      try {
+        // Ensure the parent product is linked to the store (creates store options as a side effect)
+        await this.storeProductsService.linkProductsToStore(storeId, [catalogOption.product.product_code]);
+      } catch (linkError) {
+        throw new HttpException(
+          `Failed to link product ${catalogOption.product.product_code} to store: ${linkError.message}`,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Re-check for the option now that the product has been linked
+      const createdOption = await this.storeProductOptionsService.findByOptionCode(
+        storeId,
+        optionCode,
+      );
+
+      if (!createdOption) {
+        throw new HttpException(
+          'Option could not be created from cached catalog data. Please try fetching products again.',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      let updatedOption = createdOption;
+
+      if (customPrice !== undefined && customPrice !== null) {
+        updatedOption = await this.storeProductOptionsService.updateCustomPriceAndCalculateMarkup(
+          createdOption.id,
+          customPrice,
+        );
+      } else if (markupPercentage !== undefined && markupPercentage !== null) {
+        updatedOption = await this.storeProductOptionsService.updateMarkupAndCalculateCustomPrice(
+          createdOption.id,
+          markupPercentage,
+        );
+      }
+
+      return {
+        success: true,
+        message: 'Option created from cached catalog data successfully',
+        data: {
+          optionId: updatedOption.id,
+          optionCode: updatedOption.option_code,
+          customPrice: updatedOption.custom_price,
+          markupPercentage: updatedOption.markup_percentage,
+        },
+      };
 
     } catch (error) {
       if (error instanceof HttpException) {
