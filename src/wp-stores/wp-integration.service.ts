@@ -979,6 +979,10 @@ export class wpIntegrationService {
         {
           key: '_wckm_key_source',
           value: 'preset'
+        },
+        {
+          key: '_wckm_keyed',
+          value: 'yes'
         }
       ]
     };
@@ -1048,11 +1052,24 @@ export class wpIntegrationService {
       const updatePayload = {
         regular_price: finalPrice.toString(),
         categories: categoryIds.map(id => ({ id })), // Ensure product is linked to all required categories
+        key: true,
         // Update cost price in meta data
         meta_data: [
           {
             key: '_cost_price',
             value: costPrice.toString()
+          },
+          {
+            key: '_ubiqfy_option_code',
+            value: option.product_option_code
+          },
+          {
+            key: '_wckm_key_source',
+            value: 'preset'
+          },
+          {
+            key: '_wckm_keyed',
+            value: 'yes'
           }
         ]
       };
