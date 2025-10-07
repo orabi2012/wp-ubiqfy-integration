@@ -30,6 +30,11 @@ export interface wpProduct {
   images?: string[];
 }
 
+export interface SelectedOptionFilter {
+  productCode: string;
+  optionCode?: string;
+}
+
 @Injectable()
 export class wpIntegrationService {
 
@@ -59,7 +64,7 @@ export class wpIntegrationService {
 
 
 
-  async syncProductsTowp(storeId: string): Promise<{
+  async syncProductsTowp(storeId: string, selectedOptions?: SelectedOptionFilter[]): Promise<{
     categories: any[];
     products: any[];
     errors: any[];
@@ -69,6 +74,32 @@ export class wpIntegrationService {
     });
     if (!store) {
       throw new HttpException('Store not found', HttpStatus.NOT_FOUND);
+    }
+
+    const selectedOptionMap = new Map<string, Set<string> | 'ALL'>();
+    if (selectedOptions && selectedOptions.length > 0) {
+      selectedOptions.forEach(({ productCode, optionCode }) => {
+        if (!productCode) {
+          return;
+        }
+
+        const normalizedProductCode = productCode.toString();
+        const existingEntry = selectedOptionMap.get(normalizedProductCode);
+
+        if (!optionCode) {
+          selectedOptionMap.set(normalizedProductCode, 'ALL');
+          return;
+        }
+
+        if (existingEntry === 'ALL') {
+          return;
+        }
+
+        const normalizedOptionCode = optionCode.toString();
+        const optionSet = existingEntry ?? new Set<string>();
+        optionSet.add(normalizedOptionCode);
+        selectedOptionMap.set(normalizedProductCode, optionSet);
+      });
     }
 
     // Validate WooCommerce credentials
@@ -92,7 +123,7 @@ export class wpIntegrationService {
     }
 
     // Get all linked products for this store with their options
-    const storeProducts = await this.storeProductRepository.find({
+    let storeProducts = await this.storeProductRepository.find({
       where: { wpStore: { id: storeId }, is_active: true },
       relations: ['ubiqfyProduct', 'ubiqfyProduct.options', 'options'],
     });
@@ -102,6 +133,20 @@ export class wpIntegrationService {
         'No active products linked to this store',
         HttpStatus.BAD_REQUEST,
       );
+    }
+
+    if (selectedOptionMap.size > 0) {
+      storeProducts = storeProducts.filter((storeProduct) => {
+        const productCode = storeProduct.ubiqfyProduct?.product_code;
+        return !!productCode && selectedOptionMap.has(productCode);
+      });
+
+      if (storeProducts.length === 0) {
+        throw new HttpException(
+          'No selected products match the current store configuration',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
     }
 
     // Auto-migrate products that don't have options in the new system
@@ -140,10 +185,17 @@ export class wpIntegrationService {
     }
 
     // Refresh store products to get the newly created options
-    const refreshedStoreProducts = await this.storeProductRepository.find({
+    let refreshedStoreProducts = await this.storeProductRepository.find({
       where: { wpStore: { id: storeId }, is_active: true },
       relations: ['ubiqfyProduct', 'ubiqfyProduct.options', 'options'],
     });
+
+    if (selectedOptionMap.size > 0) {
+      refreshedStoreProducts = refreshedStoreProducts.filter((storeProduct) => {
+        const productCode = storeProduct.ubiqfyProduct?.product_code;
+        return !!productCode && selectedOptionMap.has(productCode);
+      });
+    }
 
     // Cache existing wp products for efficient lookup
     const existingProductsMap: Map<string, any> = new Map();
@@ -288,6 +340,23 @@ export class wpIntegrationService {
             }
             return true;
           });
+        }
+
+        if (selectedOptionMap.size > 0) {
+          const optionSelection = selectedOptionMap.get(ubiqfyProduct.product_code);
+
+          if (!optionSelection) {
+            console.log(
+              `⏭️  Skipping product "${ubiqfyProduct.name}" - not included in selected options`,
+            );
+            continue;
+          }
+
+          if (hasProductOptions && optionSelection !== 'ALL') {
+            validOptions = validOptions.filter((option) =>
+              optionSelection.has(option.product_option_code),
+            );
+          }
         }
 
         // Skip if no valid options found

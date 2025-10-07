@@ -578,6 +578,20 @@ async function syncSelectedProductsTowp() {
 
     console.log(`Total processed items: ${selectedProducts.length}`);
 
+    // Prepare unique selection payload for backend filtering
+    const selectionMap = new Map();
+    selectedProducts.forEach(item => {
+        const key = `${item.productCode}:${item.optionCode || ''}`;
+        if (!selectionMap.has(key)) {
+            const payload = { productCode: item.productCode };
+            if (item.optionCode) {
+                payload.optionCode = item.optionCode;
+            }
+            selectionMap.set(key, payload);
+        }
+    });
+    const selectedOptionsPayload = Array.from(selectionMap.values());
+
     if (selectedProducts.length === 0) {
         showAlert('No options were selected for processing. Please select individual options using "Include this option" checkboxes.', 'error');
         return;
@@ -645,7 +659,8 @@ async function syncSelectedProductsTowp() {
         syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing to wp...';
 
         const { response: syncResponse, result: syncResult } = await apiCall(`/wp-stores/${storeId}/sync-to-wp`, {
-            method: 'POST'
+            method: 'POST',
+            body: JSON.stringify({ selectedOptions: selectedOptionsPayload })
         });
 
         if (syncResponse.ok && syncResult.success) {

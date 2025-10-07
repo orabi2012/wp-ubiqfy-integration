@@ -21,6 +21,10 @@ import { SuperAdminGuard } from '../auth/super-admin.guard';
 import { StoreAccessGuard } from '../auth/store-access.guard';
 import { isValidUUID } from '../utils/uuid.helper';
 
+interface SyncToWpRequest {
+  selectedOptions?: Array<{ productCode: string; optionCode?: string }>;
+}
+
 @Controller('wp-stores')
 @UseGuards(AuthGuard('jwt'))
 export class wpStoresController {
@@ -205,13 +209,6 @@ export class wpStoresController {
       const products = await this.ubiqfyProductsService.findProductsByEnvironment(store.ubiqfy_sandbox);
 
       console.log('📦 Products found:', products.length);
-      console.log('🔍 First product sample:', products[0] ? {
-        id: products[0].id,
-        product_code: products[0].product_code,
-        name: products[0].name,
-        is_sandbox: products[0].is_sandbox,
-        optionsCount: products[0].options?.length || 0
-      } : 'No products');
 
       // Extract distinct countries similar to fetchUbiqfyProducts
       const distinctCountries = [
@@ -605,14 +602,17 @@ export class wpStoresController {
 
   @Post(':id/sync-to-wp')
   @UseGuards(StoreAccessGuard)
-  async syncProductsTowp(@Param('id') storeId: string) {
+  async syncProductsTowp(
+    @Param('id') storeId: string,
+    @Body() body: SyncToWpRequest = {},
+  ) {
     this.validateUUID(storeId);
     try {
       // Update sync status to 'syncing' before starting
       await this.wpStoresService.updateSyncStatus(storeId, SyncStatus.SYNCING);
 
       const syncResult =
-        await this.wpIntegrationService.syncProductsTowp(storeId);
+        await this.wpIntegrationService.syncProductsTowp(storeId, body.selectedOptions);
 
       // Update sync status to 'success' and set product count on successful sync
       const totalProductsSynced = syncResult.products.length;
