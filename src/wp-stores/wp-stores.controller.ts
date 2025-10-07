@@ -605,17 +605,14 @@ export class wpStoresController {
 
   @Post(':id/sync-to-wp')
   @UseGuards(StoreAccessGuard)
-  async syncProductsTowp(
-    @Param('id') storeId: string,
-    @Body() body?: { selectedOptions?: Array<{ productCode: string; optionCode?: string }> }
-  ) {
+  async syncProductsTowp(@Param('id') storeId: string) {
     this.validateUUID(storeId);
     try {
       // Update sync status to 'syncing' before starting
       await this.wpStoresService.updateSyncStatus(storeId, SyncStatus.SYNCING);
 
       const syncResult =
-        await this.wpIntegrationService.syncProductsTowp(storeId, body?.selectedOptions);
+        await this.wpIntegrationService.syncProductsTowp(storeId);
 
       // Update sync status to 'success' and set product count on successful sync
       const totalProductsSynced = syncResult.products.length;

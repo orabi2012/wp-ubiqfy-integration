@@ -59,10 +59,7 @@ export class wpIntegrationService {
 
 
 
-  async syncProductsTowp(
-    storeId: string,
-    selectedOptions?: Array<{ productCode: string; optionCode?: string }>
-  ): Promise<{
+  async syncProductsTowp(storeId: string): Promise<{
     categories: any[];
     products: any[];
     errors: any[];
@@ -143,65 +140,10 @@ export class wpIntegrationService {
     }
 
     // Refresh store products to get the newly created options
-    let refreshedStoreProducts = await this.storeProductRepository.find({
+    const refreshedStoreProducts = await this.storeProductRepository.find({
       where: { wpStore: { id: storeId }, is_active: true },
       relations: ['ubiqfyProduct', 'ubiqfyProduct.options', 'options'],
     });
-
-    // Filter products/options based on user selection if provided
-    if (selectedOptions && selectedOptions.length > 0) {
-      console.log(`🎯 Filtering to ${selectedOptions.length} selected product-option pairs...`);
-      
-      // Create a map for quick lookup: productCode -> Set of optionCodes
-      const selectionMap = new Map<string, Set<string>>();
-      selectedOptions.forEach(selection => {
-        if (!selectionMap.has(selection.productCode)) {
-          selectionMap.set(selection.productCode, new Set());
-        }
-        if (selection.optionCode) {
-          const optionSet = selectionMap.get(selection.productCode);
-          if (optionSet) {
-            optionSet.add(selection.optionCode);
-          }
-        }
-      });
-
-      // Filter store products to only include selected ones
-      refreshedStoreProducts = refreshedStoreProducts.filter(storeProduct => {
-        const productCode = storeProduct.ubiqfyProduct.product_code;
-        
-        // Skip if this product is not in the selection
-        if (!selectionMap.has(productCode)) {
-          return false;
-        }
-
-        // If product has options, filter them to only include selected ones
-        const selectedOptionCodes = selectionMap.get(productCode);
-        if (storeProduct.options && storeProduct.options.length > 0 && selectedOptionCodes && selectedOptionCodes.size > 0) {
-          // Filter the options array to only include selected options
-          storeProduct.options = storeProduct.options.filter(option => 
-            selectedOptionCodes.has(option.option_code)
-          );
-          
-          // Also filter the ubiqfyProduct.options for consistency
-          if (storeProduct.ubiqfyProduct.options) {
-            storeProduct.ubiqfyProduct.options = storeProduct.ubiqfyProduct.options.filter(option =>
-              selectedOptionCodes.has(option.product_option_code)
-            );
-          }
-          
-          // Skip product if no options remain after filtering
-          if (storeProduct.options.length === 0) {
-            console.log(`⏭️  Skipping product ${productCode} - no selected options`);
-            return false;
-          }
-        }
-
-        return true;
-      });
-
-      console.log(`✅ Filtered to ${refreshedStoreProducts.length} products with selected options`);
-    }
 
     // Cache existing wp products for efficient lookup
     const existingProductsMap: Map<string, any> = new Map();
