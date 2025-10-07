@@ -644,8 +644,17 @@ async function syncSelectedProductsTowp() {
         // Step 2: Sync to wp
         syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing to wp...';
 
+        // Create payload with selected product-option pairs
+        const selectedOptionsPayload = selectedProducts.map(product => ({
+            productCode: product.productCode,
+            optionCode: product.optionCode
+        }));
+
+        console.log(`📤 Sending ${selectedOptionsPayload.length} selected options to sync:`, selectedOptionsPayload);
+
         const { response: syncResponse, result: syncResult } = await apiCall(`/wp-stores/${storeId}/sync-to-wp`, {
-            method: 'POST'
+            method: 'POST',
+            body: JSON.stringify({ selectedOptions: selectedOptionsPayload })
         });
 
         if (syncResponse.ok && syncResult.success) {
