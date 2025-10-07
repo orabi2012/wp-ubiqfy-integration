@@ -273,6 +273,87 @@ function updateMainCheckboxState() {
     }
 }
 
+const BULK_LINK_BATCH_SIZE = 10;
+
+function chunkArray(items, chunkSize) {
+    if (!Array.isArray(items) || chunkSize <= 0) {
+        return [];
+    }
+    const chunks = [];
+    for (let i = 0; i < items.length; i += chunkSize) {
+        chunks.push(items.slice(i, i + chunkSize));
+    }
+    return chunks;
+}
+
+function buildSelectedOptionsPayload(items) {
+    const uniqueKeys = new Set();
+    const payload = [];
+
+    items.forEach(item => {
+        const productCode = item?.productCode;
+        if (!productCode) {
+            return;
+        }
+
+        const optionCode = item?.optionCode || '';
+        const key = `${productCode}::${optionCode}`;
+
+        if (uniqueKeys.has(key)) {
+            return;
+        }
+
+        uniqueKeys.add(key);
+        const entry = { productCode };
+        if (optionCode) {
+            entry.optionCode = optionCode;
+        }
+        payload.push(entry);
+    });
+
+    return payload;
+}
+
+/**
+ * Persist selected products/options in manageable batches to avoid oversized payloads
+ */
+async function bulkLinkSelectedProducts(storeId, products, onBatchProgress) {
+    if (!Array.isArray(products) || products.length === 0) {
+        return { totalSaved: 0, totalBatches: 0 };
+    }
+
+    const batchSize = BULK_LINK_BATCH_SIZE;
+    const batches = chunkArray(products, batchSize);
+    const totalBatches = batches.length;
+    let totalSaved = 0;
+
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const batch = batches[batchIndex];
+
+        if (typeof onBatchProgress === 'function') {
+            onBatchProgress({
+                currentBatch: batchIndex + 1,
+                totalBatches,
+                batchSize: batch.length,
+            });
+        }
+
+        const { response, result, error } = await apiCall(`/wp-stores/${storeId}/bulk-link-products`, {
+            method: 'POST',
+            body: JSON.stringify({ products: batch })
+        });
+
+        if (!response?.ok || !result?.success) {
+            const message = result?.message || error?.message || 'Failed to save products to database';
+            throw new Error(message);
+        }
+
+        totalSaved += typeof result.count === 'number' ? result.count : batch.length;
+    }
+
+    return { totalSaved, totalBatches };
+}
+
 /**
  * Save selected products to database
  */
@@ -385,32 +466,32 @@ async function saveSelectedProductsToDB() {
     }
 
     const saveBtn = document.getElementById('saveSelectedProductsBtn');
-    const originalText = saveBtn.textContent;
 
     try {
         setButtonLoading(saveBtn, true);
 
-        const { response, result } = await apiCall(`/wp-stores/${storeId}/bulk-link-products`, {
-            method: 'POST',
-            body: JSON.stringify({ products: selectedProducts })
+        const { totalSaved, totalBatches } = await bulkLinkSelectedProducts(
+            storeId,
+            selectedProducts,
+            ({ currentBatch, totalBatches }) => {
+                saveBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Saving batch ${currentBatch}/${totalBatches}...`;
+            }
+        );
+
+        showAlert(`✅ Successfully saved ${totalSaved} product${totalSaved === 1 ? '' : 's'} to database!`, 'success');
+
+        console.log(`✅ Saved ${totalSaved} products across ${totalBatches} batch(es)`);
+
+        // Update UI to show products are saved
+        checkboxes.forEach(checkbox => {
+            const productCard = checkbox.closest('.col-md-6, .col-lg-4, .col-12');
+            if (productCard) {
+                addSavedBadge(productCard);
+            }
         });
-
-        if (response.ok && result.success) {
-            showAlert(`✅ Successfully saved ${result.count} products to database!`, 'success');
-
-            // Update UI to show products are saved
-            checkboxes.forEach(checkbox => {
-                const productCard = checkbox.closest('.col-md-6, .col-lg-4, .col-12');
-                if (productCard) {
-                    addSavedBadge(productCard);
-                }
-            });
-        } else {
-            showAlert(result.message || 'Failed to save products to database', 'error');
-        }
     } catch (error) {
         console.error('Error saving products:', error);
-        showAlert('Error saving products to database', 'error');
+        showAlert(error.message || 'Error saving products to database', 'error');
     } finally {
         setButtonLoading(saveBtn, false);
     }
@@ -578,20 +659,6 @@ async function syncSelectedProductsTowp() {
 
     console.log(`Total processed items: ${selectedProducts.length}`);
 
-    // Prepare unique selection payload for backend filtering
-    const selectionMap = new Map();
-    selectedProducts.forEach(item => {
-        const key = `${item.productCode}:${item.optionCode || ''}`;
-        if (!selectionMap.has(key)) {
-            const payload = { productCode: item.productCode };
-            if (item.optionCode) {
-                payload.optionCode = item.optionCode;
-            }
-            selectionMap.set(key, payload);
-        }
-    });
-    const selectedOptionsPayload = Array.from(selectionMap.values());
-
     if (selectedProducts.length === 0) {
         showAlert('No options were selected for processing. Please select individual options using "Include this option" checkboxes.', 'error');
         return;
@@ -631,79 +698,122 @@ async function syncSelectedProductsTowp() {
     const syncBtn = document.getElementById('syncTowpBtn');
     const originalText = syncBtn.innerHTML;
 
+    const batches = chunkArray(selectedProducts, BULK_LINK_BATCH_SIZE);
+    const totalBatches = batches.length;
+
+    if (totalBatches === 0) {
+        showAlert('No products available for batch processing.', 'warning');
+        return;
+    }
+
+    let totalSavedProducts = 0;
+    let totalSyncedProducts = 0;
+    const syncedCategoryMap = new Map();
+    const aggregatedErrors = [];
+
     try {
         syncBtn.disabled = true;
 
-        // Step 1: Save to database
-        syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving to database...';
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+            const batch = batches[batchIndex];
+            const batchLabel = `${batchIndex + 1}/${totalBatches}`;
 
-        const { response: saveResponse, result: saveResult } = await apiCall(`/wp-stores/${storeId}/bulk-link-products`, {
-            method: 'POST',
-            body: JSON.stringify({ products: selectedProducts })
-        });
+            syncBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Saving batch ${batchLabel}...`;
 
-        if (!saveResponse.ok || !saveResult.success) {
-            showAlert(saveResult.message || 'Failed to save products to database', 'error');
-            return;
-        }
+            const saveResponseData = await apiCall(`/wp-stores/${storeId}/bulk-link-products`, {
+                method: 'POST',
+                body: JSON.stringify({ products: batch })
+            });
 
-        // Update UI to show products are saved
-        checkboxes.forEach(checkbox => {
-            const productCard = checkbox.closest('.col-md-6, .col-lg-4, .col-12');
-            if (productCard) {
-                addSavedBadge(productCard);
-            }
-        });
-
-        // Step 2: Sync to wp
-        syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Syncing to wp...';
-
-        const { response: syncResponse, result: syncResult } = await apiCall(`/wp-stores/${storeId}/sync-to-wp`, {
-            method: 'POST',
-            body: JSON.stringify({ selectedOptions: selectedOptionsPayload })
-        });
-
-        if (syncResponse.ok && syncResult.success) {
-            const { categories, products, errors } = syncResult.data;
-
-            let message = `✅ Successfully saved ${saveResult.count} products and synced to wp!<br>`;
-            message += `<strong>Categories:</strong> ${categories.length}<br>`;
-            message += `<strong>Products:</strong> ${products.length}`;
-
-            if (errors.length > 0) {
-                message += `<br><strong>Errors:</strong> ${errors.length}`;
-                console.error('Sync errors:', errors);
+            if (!saveResponseData.response?.ok || !saveResponseData.result?.success) {
+                const errorMessage = saveResponseData.result?.message || saveResponseData.error?.message || 'Failed to save products to database';
+                showAlert(`Batch ${batchLabel} failed while saving: ${errorMessage}`, 'error');
+                return;
             }
 
-            showAlert(message, 'success');
+            totalSavedProducts += typeof saveResponseData.result.count === 'number'
+                ? saveResponseData.result.count
+                : batch.length;
 
-            // Update UI to show products are synced
-            checkboxes.forEach(checkbox => {
-                const productCard = checkbox.closest('.col-md-6, .col-lg-4, .col-12');
-                if (productCard) {
-                    addSyncedBadge(productCard);
+            // Update product cards with "Saved" badge for this batch
+            const batchProductCodes = new Set(batch.map(item => item.productCode));
+            batchProductCodes.forEach(productCode => {
+                const checkbox = document.querySelector(`.product-checkbox[value="${productCode}"]`);
+                if (checkbox) {
+                    const productCard = checkbox.closest('.col-md-6, .col-lg-4, .col-12');
+                    if (productCard) {
+                        addSavedBadge(productCard);
+                    }
                 }
             });
 
-            // Uncheck all checkboxes
-            checkboxes.forEach(cb => {
-                cb.checked = false;
-                togglePricingConfig(cb);
-            });
-            updateSelectedCount();
+            syncBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Syncing batch ${batchLabel}...`;
 
-            // Refresh page after successful sync to show updated sync status
+            const batchSelectedOptions = buildSelectedOptionsPayload(batch);
+            const syncResponseData = await apiCall(`/wp-stores/${storeId}/sync-to-wp`, {
+                method: 'POST',
+                body: JSON.stringify({ selectedOptions: batchSelectedOptions })
+            });
+
+            if (!syncResponseData.response?.ok || !syncResponseData.result?.success) {
+                const errorMessage = syncResponseData.result?.message || syncResponseData.error?.message || 'Failed to sync products to wp';
+                showAlert(`Batch ${batchLabel} saved but failed to sync to wp: ${errorMessage}`, 'warning');
+                return;
+            }
+
+            const { categories = [], products = [], errors = [] } = syncResponseData.result.data || {};
+
+            categories.forEach(category => {
+                if (category && typeof category.id !== 'undefined') {
+                    syncedCategoryMap.set(category.id, category);
+                }
+            });
+
+            totalSyncedProducts += Array.isArray(products) ? products.length : 0;
+
+            if (Array.isArray(errors) && errors.length > 0) {
+                aggregatedErrors.push(...errors);
+            }
+
+            // Update product cards with "Synced" badge for this batch
+            batchProductCodes.forEach(productCode => {
+                const checkbox = document.querySelector(`.product-checkbox[value="${productCode}"]`);
+                if (checkbox) {
+                    const productCard = checkbox.closest('.col-md-6, .col-lg-4, .col-12');
+                    if (productCard) {
+                        addSyncedBadge(productCard);
+                    }
+                }
+            });
+        }
+
+        // Clear selections and provide final summary
+        checkboxes.forEach(cb => {
+            cb.checked = false;
+            togglePricingConfig(cb);
+        });
+        updateSelectedCount();
+
+        let message = `✅ Saved ${totalSavedProducts} product${totalSavedProducts === 1 ? '' : 's'} across ${totalBatches} batch${totalBatches === 1 ? '' : 'es'} and synced ${totalSyncedProducts} to wp.`;
+        if (syncedCategoryMap.size > 0) {
+            message += `<br><strong>Categories:</strong> ${syncedCategoryMap.size}`;
+        }
+        if (aggregatedErrors.length > 0) {
+            message += `<br><strong>Errors:</strong> ${aggregatedErrors.length}`;
+            console.error('Sync errors:', aggregatedErrors);
+        }
+
+        showAlert(message, aggregatedErrors.length > 0 ? 'warning' : 'success');
+
+        if (aggregatedErrors.length === 0) {
             setTimeout(() => {
                 window.location.reload();
             }, 2000);
-
-        } else {
-            showAlert(`Products saved to database but failed to sync to wp: ${syncResult.message || 'Unknown error'}`, 'warning');
         }
 
     } catch (error) {
         console.error('Error in sync process:', error);
-        showAlert('Error during save and sync process', 'error');
+        showAlert(error.message || 'Error during save and sync process', 'error');
     } finally {
         syncBtn.disabled = false;
         syncBtn.innerHTML = originalText;
