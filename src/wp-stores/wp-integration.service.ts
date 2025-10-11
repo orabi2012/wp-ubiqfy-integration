@@ -953,8 +953,11 @@ export class wpIntegrationService {
     // Create product payload using WooCommerce REST API format
     const redeemUrl = storeProduct.ubiqfyProduct?.reedem_url;
     const descriptionContent = option.description || `${option.name} - Digital Gift Card`;
-    const fullDescription = redeemUrl
-      ? `${descriptionContent}\nRedeem URL: ${redeemUrl}`
+    const redeemLink = redeemUrl
+      ? `<a href="${redeemUrl}" target="_blank" rel="noopener noreferrer">${redeemUrl}</a>`
+      : null;
+    const fullDescription = redeemLink
+      ? `${descriptionContent}\nRedeem URL: ${redeemLink}`
       : descriptionContent;
 
     const productPayload = {
