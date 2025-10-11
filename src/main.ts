@@ -10,8 +10,23 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Increase JSON body size limit to handle bulk product payloads
-  app.use(json({ limit: '2mb' }));
-  app.use(urlencoded({ limit: '2mb', extended: true }));
+  app.use(
+    json({
+      limit: '2mb',
+      verify: (req: any, _res, buf) => {
+        req.rawBody = Buffer.from(buf);
+      },
+    }),
+  );
+  app.use(
+    urlencoded({
+      limit: '2mb',
+      extended: true,
+      verify: (req: any, _res, buf) => {
+        req.rawBody = Buffer.from(buf);
+      },
+    }),
+  );
 
   // Configure cookie parser
   app.use(cookieParser());

@@ -216,7 +216,7 @@
                                                             <label for="wp_consumer_key" class="form-label">Consumer Key
                                                                 *</label>
                                                             <input type="text" class="form-control" id="wp_consumer_key"
-                                                                name="wp_consumer_key"
+                                                                name="wp_consumer_key" autocomplete="off"
                                                                 value="<%= store.wp_consumer_key || '' %>" required>
                                                             <small class="form-text text-muted">Your WooCommerce REST
                                                                 API consumer key</small>
@@ -227,9 +227,24 @@
                                                                 *</label>
                                                             <input type="password" class="form-control"
                                                                 id="wp_consumer_secret" name="wp_consumer_secret"
-                                                                value="<%= store.wp_consumer_secret || '' %>" required>
+                                                                autocomplete="new-password"
+                                                                placeholder="Enter new secret or leave blank to keep current">
                                                             <small class="form-text text-muted">Your WooCommerce REST
-                                                                API consumer secret</small>
+                                                                API consumer secret. Leave blank to keep the existing
+                                                                secret.</small>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="row">
+                                                        <div class="col-md-6 mb-3">
+                                                            <label for="wp_webhook_key" class="form-label">Webhook
+                                                                Secret Key
+                                                                *</label>
+                                                            <input type="text" class="form-control" id="wp_webhook_key"
+                                                                name="wp_webhook_key" autocomplete="off"
+                                                                value="<%= store.wp_webhook_key || '' %>" required>
+                                                            <small class="form-text text-muted">Used to verify
+                                                                WooCommerce webhook signatures.</small>
                                                         </div>
                                                     </div>
 

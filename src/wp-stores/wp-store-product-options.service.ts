@@ -1,11 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { wpStoreProductOption } from './wp-store-product-option.entity';
 import { wpStoreProduct } from './wp-store-products.entity';
+import { wpStore } from './wp-stores.entity';
 
 @Injectable()
 export class wpStoreProductOptionsService {
+  private readonly logger = new Logger(wpStoreProductOptionsService.name);
+
   constructor(
     @InjectRepository(wpStoreProductOption)
     private readonly optionRepository: Repository<wpStoreProductOption>,
@@ -504,5 +507,178 @@ export class wpStoreProductOptionsService {
       .where('wpStore.id = :storeId', { storeId })
       .andWhere('option.option_code = :optionCode', { optionCode })
       .getOne();
+  }
+
+  /**
+   * Handle WooCommerce product deleted webhook by removing linked options
+   */
+  async handleWooProductDeleted(
+    store: wpStore,
+    productData: any,
+  ): Promise<
+    | {
+      message: string;
+      deleted_options: number;
+      deleted_product: {
+        wp_product_id: string | null;
+        sku: string | null;
+        status: string;
+      };
+      removed_options: Array<{
+        id: string;
+        option_code: string;
+        ubiqfy_code: string | null;
+        ubiqfy_name: string | null;
+        wp_product_id: string | null;
+      }>;
+    }
+    | {
+      message: string;
+      wp_product_id?: string | null;
+      sku?: string | null;
+    }
+  > {
+    const productId = productData?.id ? productData.id.toString() : null;
+    const sku = productData?.sku ? String(productData.sku) : null;
+    let productName = this.extractProductNameFromPayload(productData);
+
+    this.logger.log(
+      `🗑️  WooCommerce product deleted: ${productName ?? 'Unknown'} (ID: ${productId ?? 'N/A'}, SKU: ${sku ?? 'N/A'}) for store ${store.wp_store_name}`,
+    );
+
+    const optionCodeFromSku = this.extractOptionCodeFromSku(store, sku);
+
+    if (!productId && !optionCodeFromSku) {
+      this.logger.warn(
+        '⚠️  Product deletion payload missing both product ID and resolvable SKU – nothing to remove',
+      );
+      return {
+        message: 'No product identifier found in webhook payload',
+        wp_product_id: productId,
+        sku,
+      };
+    }
+
+    const query = this.optionRepository
+      .createQueryBuilder('option')
+      .leftJoinAndSelect('option.storeProduct', 'storeProduct')
+      .leftJoinAndSelect('storeProduct.ubiqfyProduct', 'ubiqfyProduct')
+      .where('storeProduct.wp_store_id = :storeId', { storeId: store.id });
+
+    if (productId && optionCodeFromSku) {
+      query.andWhere(
+        '(option.wp_product_id = :productId OR option.option_code = :optionCode)',
+        { productId, optionCode: optionCodeFromSku },
+      );
+    } else if (productId) {
+      query.andWhere('option.wp_product_id = :productId', { productId });
+    } else if (optionCodeFromSku) {
+      query.andWhere('option.option_code = :optionCode', {
+        optionCode: optionCodeFromSku,
+      });
+    }
+
+    const matchingOptions = await query.getMany();
+
+    this.logger.log(
+      `🔍 DEBUG: Found ${matchingOptions.length} linked option(s) for product ID ${productId ?? 'N/A'} and option code ${optionCodeFromSku ?? 'N/A'}`,
+    );
+
+    if (matchingOptions.length === 0) {
+      this.logger.warn(
+        `⚠️  No linked options found for deleted WooCommerce product. Product ID: ${productId ?? 'N/A'}, SKU: ${sku ?? 'N/A'}`,
+      );
+      return {
+        message: 'No linked product found for deleted WooCommerce product',
+        wp_product_id: productId,
+        sku,
+      };
+    }
+
+    const removedOptions = matchingOptions.map((option) => ({
+      id: option.id,
+      option_code: option.option_code,
+      ubiqfy_code: option.storeProduct?.ubiqfyProduct?.product_code ?? null,
+      ubiqfy_name: option.storeProduct?.ubiqfyProduct?.name ?? null,
+      wp_product_id: option.wp_product_id,
+    }));
+
+    await this.optionRepository.remove(matchingOptions);
+
+    const firstOption = removedOptions[0];
+    if (!productName) {
+      productName = firstOption.ubiqfy_name ?? firstOption.ubiqfy_code;
+    }
+
+    this.logger.log(
+      `✅ Deleted ${matchingOptions.length} option(s) from database for product ${productName ?? firstOption.wp_product_id ?? 'Unknown Product'} (${firstOption.wp_product_id ?? 'N/A'})`,
+    );
+
+    return {
+      message:
+        'Product deleted event processed - options removed from database',
+      deleted_options: removedOptions.length,
+      deleted_product: {
+        wp_product_id: productId,
+        sku,
+        status: 'deleted_from_database',
+      },
+      removed_options: removedOptions,
+    };
+  }
+
+  private extractOptionCodeFromSku(
+    store: wpStore,
+    sku?: string | null,
+  ): string | null {
+    if (!sku) {
+      return null;
+    }
+
+    const expectedPrefix = `${store.sku_prefix || 'UBQ'}-`;
+    if (!sku.startsWith(expectedPrefix)) {
+      return null;
+    }
+
+    const optionCode = sku.substring(expectedPrefix.length);
+    return optionCode || null;
+  }
+
+  private extractProductNameFromPayload(payload: any): string | null {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const candidateKeys = [
+      'name',
+      'title',
+      'productName',
+      'post_title',
+      'display_name',
+    ];
+
+    for (const key of candidateKeys) {
+      if (payload[key] && typeof payload[key] === 'string') {
+        return payload[key];
+      }
+    }
+
+    if (payload.product && typeof payload.product === 'object') {
+      for (const key of candidateKeys) {
+        if (payload.product[key] && typeof payload.product[key] === 'string') {
+          return payload.product[key];
+        }
+      }
+    }
+
+    if (payload.data && typeof payload.data === 'object') {
+      for (const key of candidateKeys) {
+        if (payload.data[key] && typeof payload.data[key] === 'string') {
+          return payload.data[key];
+        }
+      }
+    }
+
+    return null;
   }
 }

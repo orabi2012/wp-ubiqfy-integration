@@ -253,6 +253,10 @@ export class ClientsController {
         ubiqfy_sandbox: body.ubiqfy_sandbox === 'true',
       };
 
+      if (body.wp_consumer_secret && body.wp_consumer_secret.trim() === '') {
+        delete storeData.wp_consumer_secret;
+      }
+
       console.log('Adding store with data:', {
         currency_conversion_rate: storeData.currency_conversion_rate,
         ubiqfy_currency: storeData.ubiqfy_currency,
@@ -289,6 +293,8 @@ export class ClientsController {
           parseFloat(body.currency_conversion_rate) || 3.75,
         ubiqfy_currency: body.ubiqfy_currency || 'USD',
         ubiqfy_username: body.ubiqfy_username,
+        wp_consumer_key: body.wp_consumer_key,
+        wp_webhook_key: body.wp_webhook_key,
         ubiqfy_terminal_key: body.ubiqfy_terminal_key,
         sync_status: body.sync_status,
         // Toggle switches: 'true' when on, undefined when off
@@ -307,6 +313,10 @@ export class ClientsController {
       // Don't update password if it's empty (keep existing password) - available to all users
       if (body.ubiqfy_password && body.ubiqfy_password.trim() !== '') {
         updateData.ubiqfy_password = body.ubiqfy_password;
+      }
+
+      if (body.wp_consumer_secret && body.wp_consumer_secret.trim() !== '') {
+        updateData.wp_consumer_secret = body.wp_consumer_secret;
       }
 
       await this.wpStoresService.update(id, updateData);
