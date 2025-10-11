@@ -951,9 +951,15 @@ export class wpIntegrationService {
       : option.name;
 
     // Create product payload using WooCommerce REST API format
+    const redeemUrl = storeProduct.ubiqfyProduct?.reedem_url;
+    const descriptionContent = option.description || `${option.name} - Digital Gift Card`;
+    const fullDescription = redeemUrl
+      ? `${descriptionContent}\nRedeem URL: ${redeemUrl}`
+      : descriptionContent;
+
     const productPayload = {
       name: productName,
-      description: option.description || `${option.name} - Digital Gift Card`,
+      description: fullDescription,
       short_description: `${option.name} - Digital Gift Card`,
       regular_price: finalPrice.toString(),
       sku: `${store.sku_prefix || 'UBQ'}-${option.product_option_code}`, // Add store's custom prefix
@@ -1051,7 +1057,7 @@ export class wpIntegrationService {
       // For existing products, update pricing and ensure correct category assignments
       const updatePayload = {
         regular_price: finalPrice.toString(),
-        categories: categoryIds.map(id => ({ id })), // Ensure product is linked to all required categories
+        // categories: categoryIds.map(id => ({ id })), // Ensure product is linked to all required categories
         key: true,
         // Update cost price in meta data
         meta_data: [
