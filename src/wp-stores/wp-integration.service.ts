@@ -762,6 +762,13 @@ export class wpIntegrationService {
             `✅ Using existing category: ID ${existing.id}, Name: "${existing.name}", Slug: "${existing.slug}", Parent: ${existing.parent || 'none'}`,
           );
 
+          if (categoryData.image) {
+            await this.attachImageToCategory(store, existing.id, categoryData.image);
+            if (!existing.image || !existing.image.src) {
+              existing.image = { src: categoryData.image };
+            }
+          }
+
           // Cache it for future use if cache is provided
           if (cache && categoryData.parent) {
             const cacheKey = `${categoryData.parent}-${categorySlug}`;
@@ -821,6 +828,10 @@ export class wpIntegrationService {
         slug: response.data.slug,
         parent: response.data.parent,
       });
+
+      if (categoryData.image) {
+        await this.attachImageToCategory(store, response.data.id, categoryData.image);
+      }
 
       // Cache the newly created category if cache is provided and it's a subcategory
       if (cache && categoryData.parent) {
@@ -1614,6 +1625,67 @@ export class wpIntegrationService {
       } else if (error.code === 'ECONNABORTED') {
         console.error(`Image download/upload timeout`);
       }
+    }
+  }
+
+  // Helper method to attach image to category using WooCommerce API
+  private async attachImageToCategory(
+    store: wpStore,
+    categoryId: number,
+    imageUrl: string,
+  ): Promise<void> {
+    if (!imageUrl) {
+      return;
+    }
+
+    try {
+      console.log(
+        `🖼️  Attempting to attach image to category ${categoryId}: ${imageUrl}`,
+      );
+
+      const headers = this.getWooCommerceHeaders(store);
+
+      try {
+        const categoryResponse = await axios.get(
+          `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/categories/${categoryId}`,
+          { headers },
+        );
+
+        const existingImage = categoryResponse.data?.image;
+        if (existingImage?.src) {
+          console.log(
+            `📷 Category ${categoryId} already has an image, skipping attachment (${existingImage.src})`,
+          );
+          return;
+        }
+      } catch (lookupError) {
+        console.log(
+          `⚠️  Could not verify existing category image, proceeding with attachment: ${lookupError.message}`,
+        );
+      }
+
+      const updatePayload = {
+        image: {
+          src: imageUrl,
+        },
+      };
+
+      const updateResponse = await axios.put(
+        `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v3/products/categories/${categoryId}`,
+        updatePayload,
+        { headers },
+      );
+
+      console.log(`✅ Image attached successfully to category ${categoryId}`);
+      console.log(`Image details:`, {
+        id: updateResponse.data?.image?.id,
+        url: updateResponse.data?.image?.src,
+      });
+    } catch (error) {
+      console.error(
+        `❌ Failed to attach image to category ${categoryId}:`,
+        error.response?.data || error.message,
+      );
     }
   }
 
