@@ -614,6 +614,7 @@ export class wpIntegrationService {
                   storedOption: storedOption, // Pass the stored option with pricing
                   storeProduct: storeProduct,
                   productLogo: ubiqfyProduct.logo_url,
+                  optionLogo: option.logo_url,
                   existingProductsMap: existingProductsMap,
                 },
                 storeInfo.currency,
@@ -891,6 +892,7 @@ export class wpIntegrationService {
       storedOption?: wpStoreProductOption;
       storeProduct: wpStoreProduct;
       productLogo?: string;
+      optionLogo?: string;
       existingProductsMap?: Map<string, any>;
     },
     storeCurrency: string,
@@ -901,8 +903,11 @@ export class wpIntegrationService {
       storedOption,
       storeProduct,
       productLogo,
+      optionLogo,
       existingProductsMap,
     } = productData;
+
+    const imageUrl = optionLogo || productLogo;
 
     const headers = this.getWooCommerceHeaders(store);
 
@@ -1007,12 +1012,15 @@ export class wpIntegrationService {
       ]
     };
 
-    if (productLogo) {
+    if (imageUrl) {
       console.log(
-        `📷 Will attach image after product creation: ${productLogo}`,
+        `📷 Will attach image after product creation: ${imageUrl}`,
       );
+      if (optionLogo) {
+        console.log(`📷 Using option-specific logo_url for SKU ${option.product_option_code}`);
+      }
     } else {
-      console.log(`📷 DEBUG: No productLogo provided for this product option`);
+      console.log(`📷 DEBUG: No image provided for this product option`);
     }
 
     console.log(
@@ -1110,11 +1118,11 @@ export class wpIntegrationService {
         });
 
         // Attach image after successful update
-        if (productLogo) {
+        if (imageUrl) {
           await this.attachImageToProduct(
             store,
             updateResponse.data.id,
-            productLogo,
+            imageUrl,
           );
         }
 
@@ -1142,11 +1150,11 @@ export class wpIntegrationService {
       });
 
       // Attach image after successful creation
-      if (productLogo) {
+      if (imageUrl) {
         await this.attachImageToProduct(
           store,
           response.data.id,
-          productLogo,
+          imageUrl,
         );
       }
 
