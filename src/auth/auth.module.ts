@@ -11,12 +11,13 @@ import { UsersService } from '../users/users.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../users/users.entity';
 import { wpStoresModule } from '../wp-stores/wp-stores.module';
+import { getJwtSecret } from '../config/jwt.config';
 
 @Module({
   imports: [
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'defaultSecretKey',
+      secret: getJwtSecret(),
       signOptions: { expiresIn: '1d' },
     }),
     TypeOrmModule.forFeature([User]),

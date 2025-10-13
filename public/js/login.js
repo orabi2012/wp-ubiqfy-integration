@@ -8,6 +8,26 @@ document.addEventListener('DOMContentLoaded', function () {
     const errorMessage = document.getElementById('error-message');
     const successMessage = document.getElementById('success-message');
 
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) {
+            return decodeURIComponent(parts.pop().split(';').shift());
+        }
+        return null;
+    }
+
+    function setRememberedUsernameCookie(username) {
+        const maxAge = 30 * 24 * 60 * 60; // 30 days
+        const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = `remembered_username=${encodeURIComponent(username)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secureFlag}`;
+    }
+
+    function clearRememberedUsernameCookie() {
+        const secureFlag = window.location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = `remembered_username=; Max-Age=0; Path=/; SameSite=Lax${secureFlag}`;
+    }
+
     // Clear error messages
     function clearErrors() {
         errorMessage.style.display = 'none';
@@ -123,8 +143,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Success
                 showSuccess('Login successful! Redirecting...');
 
-                // Save credentials if remember me is checked
-                saveCredentials(username, password, rememberMe);
+                // Persist remember-me preference locally; cookie will also be managed client-side
+                saveCredentials(username, rememberMe);
 
                 // Short delay to show success message
                 setTimeout(() => {
@@ -183,47 +203,36 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Load saved credentials on page load
     function loadSavedCredentials() {
-        const savedUsername = localStorage.getItem('rememberedUsername');
-        const savedPassword = localStorage.getItem('rememberedPassword');
-        const wasRemembered = localStorage.getItem('rememberMe') === 'true';
+        const cookieUsername = getCookie('remembered_username');
 
-        if (wasRemembered && savedUsername) {
-            usernameInput.value = savedUsername;
+        if (cookieUsername) {
+            usernameInput.value = cookieUsername;
             rememberMeCheckbox.checked = true;
-
-            if (savedPassword) {
-                passwordInput.value = savedPassword;
-                // Focus on login button since both fields are filled
-                loginBtn.focus();
-            } else {
-                // Focus on password field since username is filled
-                passwordInput.focus();
-            }
+            passwordInput.focus();
         } else {
-            // Focus on username field when page loads
+            rememberMeCheckbox.checked = false;
             usernameInput.focus();
         }
     }
 
-    // Save credentials if remember me is checked
-    function saveCredentials(username, password, rememberMe) {
+    // Save username if remember me is checked
+    function saveCredentials(username, rememberMe) {
         if (rememberMe) {
-            localStorage.setItem('rememberedUsername', username);
-            localStorage.setItem('rememberedPassword', password);
-            localStorage.setItem('rememberMe', 'true');
+            setRememberedUsernameCookie(username);
         } else {
-            localStorage.removeItem('rememberedUsername');
-            localStorage.removeItem('rememberedPassword');
-            localStorage.removeItem('rememberMe');
+            clearRememberedUsernameCookie();
         }
     }
 
     // Clear saved credentials if remember me is unchecked
     rememberMeCheckbox.addEventListener('change', function () {
-        if (!this.checked) {
-            localStorage.removeItem('rememberedUsername');
-            localStorage.removeItem('rememberedPassword');
-            localStorage.removeItem('rememberMe');
+        if (this.checked) {
+            const currentUsername = usernameInput.value.trim();
+            if (currentUsername) {
+                setRememberedUsernameCookie(currentUsername);
+            }
+        } else {
+            clearRememberedUsernameCookie();
         }
     });
 

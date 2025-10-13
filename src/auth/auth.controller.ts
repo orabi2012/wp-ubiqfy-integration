@@ -54,19 +54,33 @@ export class AuthController {
         });
       }
 
-      const result = await this.authService.login(user, body.rememberMe || false);
+      const result = await this.authService.login(user);
 
-      // Set cookie for web interface
-      const maxAge = body.rememberMe
-        ? 30 * 24 * 60 * 60 * 1000 // 30 days if remember me is checked
-        : 24 * 60 * 60 * 1000; // 24 hours for regular login
+      const tokenMaxAge = 3 * 60 * 60 * 1000; // 3 hours
+      const isProduction = process.env.NODE_ENV === 'production';
 
       res.cookie('access_token', result.access_token, {
         httpOnly: true,
-        secure: false, // Set to true in production with HTTPS
+        secure: isProduction,
         sameSite: 'strict',
-        maxAge,
+        maxAge: tokenMaxAge,
       });
+
+      if (body.rememberMe) {
+        const usernameMaxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+        res.cookie('remembered_username', user.username, {
+          httpOnly: false,
+          secure: isProduction,
+          sameSite: 'lax',
+          maxAge: usernameMaxAge,
+        });
+      } else {
+        res.clearCookie('remembered_username', {
+          httpOnly: false,
+          secure: isProduction,
+          sameSite: 'lax',
+        });
+      }
 
       return res.json(result);
     } catch (error) {

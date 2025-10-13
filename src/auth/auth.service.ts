@@ -38,7 +38,7 @@ export class AuthService {
     }
   }
 
-  async login(user: any, rememberMe: boolean = false) {
+  async login(user: any) {
     const payload = {
       username: user.username,
       sub: user.id,
@@ -46,10 +46,8 @@ export class AuthService {
       assignedStoreId: user.assignedStoreId,
     };
 
-    const expiresIn = rememberMe ? '30d' : '1d';
-
     return {
-      access_token: this.jwtService.sign(payload, { expiresIn }),
+      access_token: this.jwtService.sign(payload, { expiresIn: '3h' }),
       user: {
         id: user.id,
         username: user.username,
