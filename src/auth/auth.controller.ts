@@ -95,11 +95,18 @@ export class AuthController {
   @Post('logout')
   async logout(@Response() res) {
     try {
+      const isProduction = process.env.NODE_ENV === 'production';
       // Clear the access_token cookie
       res.clearCookie('access_token', {
         httpOnly: true,
-        secure: false, // Set to true in production with HTTPS
+        secure: isProduction,
         sameSite: 'strict',
+      });
+
+      res.clearCookie('remembered_username', {
+        httpOnly: false,
+        secure: isProduction,
+        sameSite: 'lax',
       });
 
       return res.json({ message: 'Logged out successfully' });
@@ -111,11 +118,18 @@ export class AuthController {
   @Get('logout')
   async logoutGet(@Response() res) {
     try {
+      const isProduction = process.env.NODE_ENV === 'production';
       // Clear the access_token cookie
       res.clearCookie('access_token', {
         httpOnly: true,
-        secure: false, // Set to true in production with HTTPS
+        secure: isProduction,
         sameSite: 'strict',
+      });
+
+      res.clearCookie('remembered_username', {
+        httpOnly: false,
+        secure: isProduction,
+        sameSite: 'lax',
       });
 
       // Redirect to login page after logout
