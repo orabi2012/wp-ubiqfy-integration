@@ -180,6 +180,21 @@ export class StoreController {
             const groupedVouchers = {};
             let globalIndex = 0;
 
+            const maskVoucherKey = (value: string | null | undefined): string | null => {
+                if (!value) {
+                    return null;
+                }
+
+                const normalized = value.toString().trim();
+                if (normalized.length === 0) {
+                    return null;
+                }
+
+                const halfLength = Math.ceil(normalized.length / 2);
+                const maskedPrefix = 'X'.repeat(halfLength);
+                return `${maskedPrefix}${normalized.slice(halfLength)}`;
+            };
+
             successfulVouchers.forEach((voucher) => {
                 const productName = voucher.purchaseItem?.product_option_name || 'Unknown Product';
                 if (!groupedVouchers[productName]) {
@@ -190,7 +205,11 @@ export class StoreController {
                     };
                 }
 
-                groupedVouchers[productName].vouchers.push({ ...voucher, globalIndex: ++globalIndex });
+                groupedVouchers[productName].vouchers.push({
+                    ...voucher,
+                    globalIndex: ++globalIndex,
+                    maskedReference: maskVoucherKey(voucher.reference)
+                });
                 groupedVouchers[productName].totalAmount += parseFloat(voucher.amount_wholesale) || 0;
                 groupedVouchers[productName].count++;
             });

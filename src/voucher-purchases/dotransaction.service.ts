@@ -8,6 +8,7 @@ import { wpStoreProductOption } from '../wp-stores/wp-store-product-option.entit
 import { wpStore } from '../wp-stores/wp-stores.entity';
 import { wpStoresService } from '../wp-stores/wp-stores.service';
 import { ConfigService } from '@nestjs/config';
+import { EncryptionService } from '../utils/encryption.service';
 
 interface DoTransactionRequest {
     Token: string;
@@ -113,6 +114,7 @@ export class DoTransactionService {
         private wpStoreRepository: Repository<wpStore>,
         private wpStoresService: wpStoresService,
         private configService: ConfigService,
+        private readonly encryptionService: EncryptionService,
     ) {
         this.ubiqfyApiUrl = this.configService.get<string>('UBIQFY_API_URL') || 'https://api.ubiqfy.com';
         this.ubiqfyApiKey = this.configService.get<string>('UBIQFY_API_KEY') || '';
@@ -598,23 +600,21 @@ export class DoTransactionService {
     ): Promise<void> {
         voucher.response_received_at = new Date();
         voucher.response_time_ms = responseTime;
-        voucher.ubiqfy_response = response;
+        voucher.ubiqfy_response = this.encryptionService.encryptJson(response);
+
+        const resultData = response.PaymentResultData ?? null;
+        voucher.response_amount = resultData?.ResponseAmount ?? null;
+        voucher.amount_wholesale = resultData?.AmountWholesale ?? null;
+        voucher.serial_number = resultData?.SerialNumber ? this.encryptionService.encrypt(resultData.SerialNumber) : null;
+        voucher.transaction_id = resultData?.TransactionId ?? null;
+        voucher.provider_transaction_id = resultData?.ProviderTransactionId ?? null;
+        voucher.reference = resultData?.Reference ? this.encryptionService.encrypt(resultData.Reference) : null;
+        voucher.redeem_url = resultData?.RedeemUrl ? this.encryptionService.encrypt(resultData.RedeemUrl) : null;
+        voucher.voucher_data = resultData ? this.encryptionService.encryptJson(resultData) : null;
 
         if (response.OperationSucceeded) {
             voucher.status = VoucherStatus.GENERATED;
             voucher.operation_succeeded = true;
-
-            // Extract data from PaymentResultData if available
-            const resultData = response.PaymentResultData;
-            if (resultData) {
-                voucher.response_amount = resultData.ResponseAmount || null;
-                voucher.amount_wholesale = resultData.AmountWholesale || null;
-                voucher.serial_number = resultData.SerialNumber || null;
-                voucher.transaction_id = resultData.TransactionId || null;
-                voucher.provider_transaction_id = resultData.ProviderTransactionId || null;
-                voucher.reference = resultData.Reference || null;
-                voucher.redeem_url = resultData.RedeemUrl || null;
-            }
             voucher.processed_at = new Date();
 
             this.logger.log(`Voucher ${voucher.external_id} generated successfully`);
@@ -738,7 +738,7 @@ export class DoTransactionService {
     private async attachVoucherCodesTowpProduct(
         purchaseId: string,
         wpProductId: string,
-        voucherCodes: string[]
+        vouchers: Array<{ id: string; code: string }>
     ): Promise<void> {
         try {
             // Get the purchase to find the store
@@ -768,6 +768,7 @@ export class DoTransactionService {
 
             // Attach each voucher code to the WooCommerce product using WC Key Manager API
             const attachmentResults: Array<{
+                voucherId: string;
                 code: string;
                 success: boolean;
                 keyId?: any;
@@ -776,7 +777,7 @@ export class DoTransactionService {
             }> = [];
             const apiUrl = `${store.wp_store_url.replace(/\/$/, '')}/wp-json/wc/v1/keys`;
 
-            for (const code of voucherCodes) {
+            for (const { id, code } of vouchers) {
                 try {
                     const keyData = {
                         product_id: parseInt(wpProductId),
@@ -797,18 +798,20 @@ export class DoTransactionService {
 
                     const responseData = await response.json();
                     attachmentResults.push({
+                        voucherId: id,
                         code: code,
                         success: true,
                         keyId: responseData.id,
                         response: responseData
                     });
 
-                    this.logger.log(`Successfully attached code ${code} to WooCommerce product ${wpProductId}`);
+                    this.logger.debug(`Successfully attached code ${this.maskSecret(code)} to WooCommerce product ${wpProductId}`);
 
                 } catch (codeError) {
                     const errorMessage = codeError instanceof Error ? codeError.message : String(codeError);
-                    this.logger.error(`Failed to attach code ${code} to product ${wpProductId}:`, errorMessage);
+                    this.logger.error(`Failed to attach code ${this.maskSecret(code)} to product ${wpProductId}: ${errorMessage}`);
                     attachmentResults.push({
+                        voucherId: id,
                         code: code,
                         success: false,
                         error: errorMessage
@@ -821,15 +824,15 @@ export class DoTransactionService {
             const failedAttachments = attachmentResults.filter(r => !r.success);
 
             if (failedAttachments.length > 0) {
-                this.logger.warn(`${failedAttachments.length}/${voucherCodes.length} codes failed to attach to product ${wpProductId}`);
+                this.logger.warn(`${failedAttachments.length}/${vouchers.length} codes failed to attach to product ${wpProductId}`);
                 // Still proceed with flagging successful ones
             }
 
-            this.logger.log(`Successfully attached ${successfulAttachments.length}/${voucherCodes.length} codes to WooCommerce product ${wpProductId}`);
-            console.log('WC Key Manager Attachment Results:', JSON.stringify(attachmentResults, null, 2));
+            this.logger.log(`Successfully attached ${successfulAttachments.length}/${vouchers.length} codes to WooCommerce product ${wpProductId}`);
 
             // Flag vouchers as synced to wp and update stock
-            await this.flagVouchersAsSyncedTowp(purchaseId, wpProductId, voucherCodes);
+            const voucherIds = vouchers.map(voucher => voucher.id);
+            await this.flagVouchersAsSyncedTowp(purchaseId, wpProductId, voucherIds);
 
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -845,9 +848,13 @@ export class DoTransactionService {
     private async flagVouchersAsSyncedTowp(
         purchaseId: string,
         wpProductId: string,
-        voucherCodes: string[]
+        voucherIds: string[]
     ): Promise<void> {
         try {
+            if (voucherIds.length === 0) {
+                return;
+            }
+
             // Flag vouchers as synced to wp
             await this.purchaseDetailRepository
                 .createQueryBuilder()
@@ -857,13 +864,13 @@ export class DoTransactionService {
                     wp_synced_at: new Date()
                 })
                 .where('purchase_id = :purchaseId', { purchaseId })
-                .andWhere('reference IN (:...codes)', { codes: voucherCodes })
+                .andWhere('id IN (:...ids)', { ids: voucherIds })
                 .execute();
 
             // Update stock levels in wp_store_product_options
-            await this.refreshStockLevels(wpProductId, voucherCodes.length);
+            await this.refreshStockLevels(wpProductId, voucherIds.length);
 
-            this.logger.log(`Flagged ${voucherCodes.length} vouchers as synced to wp and updated stock for product ${wpProductId}`);
+            this.logger.log(`Flagged ${voucherIds.length} vouchers as synced to wp and updated stock for product ${wpProductId}`);
 
         } catch (error) {
             this.logger.error(`Failed to flag vouchers as synced or update stock for product ${wpProductId}:`, error);
@@ -921,37 +928,42 @@ export class DoTransactionService {
                 return;
             }
 
-            // Group vouchers by wp product ID
-            const vouchersByProduct = new Map<string, string[]>();
+            // Group vouchers by wp product ID, using decrypted codes
+            const vouchersByProduct = new Map<string, Array<{ id: string; code: string }>>();
 
             for (const voucher of generatedVouchers) {
-                if (voucher.reference) { // Only process vouchers that have a reference code
-                    // Get wp product ID from wp_store_product_options table
-                    const storeProductOption = await this.wpStoreProductOptionRepository.findOne({
-                        where: { option_code: voucher.purchaseItem.product_option_code }
-                    });
-
-                    if (storeProductOption?.wp_product_id) {
-                        const wpProductId = storeProductOption.wp_product_id;
-
-                        if (!vouchersByProduct.has(wpProductId)) {
-                            vouchersByProduct.set(wpProductId, []);
-                        }
-                        vouchersByProduct.get(wpProductId)!.push(voucher.reference);
-
-                        this.logger.log(`Found wp product ID ${wpProductId} for voucher ${voucher.external_id} with code ${voucher.reference}`);
-                    } else {
-                        this.logger.warn(`No wp product ID found in wp_store_product_options for product_option_code ${voucher.purchaseItem.product_option_code}`);
-                    }
-                } else {
-                    this.logger.warn(`No reference code found for voucher ${voucher.external_id}`);
+                const decryptedReference = this.encryptionService.decrypt(voucher.reference);
+                if (!decryptedReference) {
+                    this.logger.warn(`Skipping voucher ${voucher.external_id} due to missing or unreadable reference code`);
+                    continue;
                 }
+
+                const storeProductOption = await this.wpStoreProductOptionRepository.findOne({
+                    where: { option_code: voucher.purchaseItem.product_option_code }
+                });
+
+                if (!storeProductOption?.wp_product_id) {
+                    this.logger.warn(`No wp product ID found in wp_store_product_options for product_option_code ${voucher.purchaseItem.product_option_code}`);
+                    continue;
+                }
+
+                const wpProductId = storeProductOption.wp_product_id;
+                if (!vouchersByProduct.has(wpProductId)) {
+                    vouchersByProduct.set(wpProductId, []);
+                }
+
+                vouchersByProduct.get(wpProductId)!.push({
+                    id: voucher.id,
+                    code: decryptedReference
+                });
+
+                this.logger.debug(`Prepared voucher ${voucher.external_id} for WooCommerce product ${wpProductId}`);
             }
 
             // Attach codes to each wp product
-            for (const [wpProductId, codes] of vouchersByProduct) {
-                this.logger.log(`Attaching ${codes.length} codes to wp product ${wpProductId}: ${codes.join(', ')}`);
-                await this.attachVoucherCodesTowpProduct(purchaseId, wpProductId, codes);
+            for (const [wpProductId, voucherPayload] of vouchersByProduct) {
+                this.logger.log(`Attaching ${voucherPayload.length} codes to wp product ${wpProductId}`);
+                await this.attachVoucherCodesTowpProduct(purchaseId, wpProductId, voucherPayload);
             }
 
             this.logger.log(`Completed wp attachment for purchase ${purchaseId}. Processed ${vouchersByProduct.size} products with ${generatedVouchers.length} total vouchers.`);
@@ -1024,5 +1036,18 @@ export class DoTransactionService {
             this.logger.error(`Failed to get stock info for store ${storeId}:`, error);
             throw error;
         }
+    }
+
+    private maskSecret(value: string | null | undefined): string {
+        if (!value) {
+            return '****';
+        }
+
+        const trimmed = value.toString().trim();
+        if (trimmed.length <= 8) {
+            return '****';
+        }
+
+        return `${trimmed.slice(0, 4)}…${trimmed.slice(-4)}`;
     }
 }

@@ -11,6 +11,7 @@ import { DoTransactionService } from './dotransaction.service';
 import { UbiqfyProductsModule } from '../ubiqfy-products/ubiqfy-products.module';
 import { wpStoresModule } from '../wp-stores/wp-stores.module';
 import { AuthModule } from '../auth/auth.module';
+import { UtilsModule } from '../utils/utils.module';
 
 @Module({
     imports: [
@@ -23,7 +24,8 @@ import { AuthModule } from '../auth/auth.module';
         ]),
         UbiqfyProductsModule,
         wpStoresModule,
-        AuthModule
+        AuthModule,
+        UtilsModule
     ],
     controllers: [VoucherPurchasesController],
     providers: [VoucherPurchasesService, DoTransactionService],

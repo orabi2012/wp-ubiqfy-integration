@@ -6,6 +6,7 @@ import { MerchantVoucherPurchaseItem } from './merchant-voucher-purchase-item.en
 import { MerchantVoucherPurchaseDetail, VoucherStatus } from './merchant-voucher-purchase-detail.entity';
 import { wpStore } from '../wp-stores/wp-stores.entity';
 import { isValidUUID } from '../utils/uuid.helper';
+import { EncryptionService } from '../utils/encryption.service';
 
 @Injectable()
 export class VoucherPurchasesService {
@@ -20,6 +21,7 @@ export class VoucherPurchasesService {
         private readonly purchaseDetailRepository: Repository<MerchantVoucherPurchaseDetail>,
         @InjectRepository(wpStore)
         private readonly wpStoreRepository: Repository<wpStore>,
+        private readonly encryptionService: EncryptionService,
     ) { }
 
     /**
@@ -364,7 +366,7 @@ export class VoucherPurchasesService {
      * Get purchase order with details
      */
     async getPurchaseWithDetails(purchaseId: string): Promise<MerchantVoucherPurchase | null> {
-        return await this.purchaseRepository.findOne({
+        const purchase = await this.purchaseRepository.findOne({
             where: { id: purchaseId },
             relations: [
                 'wpStore',
@@ -373,6 +375,7 @@ export class VoucherPurchasesService {
                 'voucherDetails.purchaseItem'  // Load the purchase item relationship for voucher details
             ]
         });
+        return this.decryptPurchase(purchase);
     }
 
     /**
@@ -386,21 +389,23 @@ export class VoucherPurchasesService {
             where.is_sandbox = false;
         }
 
-        return await this.purchaseRepository.find({
+        const purchases = await this.purchaseRepository.find({
             where,
             relations: ['purchaseItems', 'voucherDetails'],
             order: { created_at: 'DESC' }
         });
+        return purchases.map(purchase => this.decryptPurchase(purchase)).filter(Boolean) as MerchantVoucherPurchase[];
     }
 
     /**
      * Get all purchases (for super admin)
      */
     async getAllPurchases(): Promise<MerchantVoucherPurchase[]> {
-        return await this.purchaseRepository.find({
+        const purchases = await this.purchaseRepository.find({
             relations: ['purchaseItems', 'wpStore', 'voucherDetails'],
             order: { created_at: 'DESC' }
         });
+        return purchases.map(purchase => this.decryptPurchase(purchase)).filter(Boolean) as MerchantVoucherPurchase[];
     }
 
     /**
@@ -454,6 +459,93 @@ export class VoucherPurchasesService {
         } catch (error) {
             this.logger.error(`Failed to delete purchase order ${purchase.purchase_order_number}: ${error.message}`);
             throw new Error(`Failed to delete purchase order: ${error.message}`);
+        }
+    }
+
+    private decryptPurchase(purchase: MerchantVoucherPurchase | null): MerchantVoucherPurchase | null {
+        if (!purchase) {
+            return purchase;
+        }
+
+        if (Array.isArray(purchase.voucherDetails) && purchase.voucherDetails.length > 0) {
+            purchase.voucherDetails = purchase.voucherDetails
+                .map(detail => this.decryptVoucherDetail(detail))
+                .filter(Boolean) as MerchantVoucherPurchaseDetail[];
+        }
+
+        return purchase;
+    }
+
+    private decryptVoucherDetail(detail: MerchantVoucherPurchaseDetail | null): MerchantVoucherPurchaseDetail | null {
+        if (!detail) {
+            return detail;
+        }
+
+        const clone = Object.assign(new MerchantVoucherPurchaseDetail(), detail);
+
+        clone.serial_number = this.safeDecryptString('serial_number', detail.serial_number);
+        clone.reference = this.safeDecryptString('reference', detail.reference);
+        clone.redeem_url = this.safeDecryptString('redeem_url', detail.redeem_url);
+        clone.voucher_code = this.safeDecryptString('voucher_code', detail.voucher_code);
+        clone.voucher_pin = this.safeDecryptString('voucher_pin', detail.voucher_pin);
+
+        const voucherData = this.safeDecryptJson('voucher_data', detail.voucher_data);
+        if (voucherData !== undefined) {
+            clone.voucher_data = voucherData;
+        }
+
+        const ubiqfyResponse = this.safeDecryptJson('ubiqfy_response', detail.ubiqfy_response);
+        if (ubiqfyResponse !== undefined) {
+            clone.ubiqfy_response = ubiqfyResponse;
+        }
+
+        return clone;
+    }
+
+    private safeDecryptString(field: string, value: string | null | undefined): string | null {
+        if (value === null || value === undefined) {
+            return value ?? null;
+        }
+
+        const decrypted = this.encryptionService.decrypt(value);
+        if (decrypted === null) {
+            if (this.encryptionService.isEncrypted(value)) {
+                this.logger.warn(`Failed to decrypt ${field} for voucher detail; returning null.`);
+                return null;
+            }
+            return value;
+        }
+
+        return decrypted;
+    }
+
+    private safeDecryptJson(field: string, value: any): any {
+        if (value === null || value === undefined) {
+            return value ?? null;
+        }
+
+        if (typeof value !== 'string') {
+            return value;
+        }
+
+        const decrypted = this.encryptionService.decrypt(value);
+        if (decrypted === null) {
+            if (this.encryptionService.isEncrypted(value)) {
+                this.logger.warn(`Failed to decrypt ${field} for voucher detail; returning null.`);
+                return null;
+            }
+
+            try {
+                return JSON.parse(value);
+            } catch {
+                return value;
+            }
+        }
+
+        try {
+            return JSON.parse(decrypted);
+        } catch {
+            return decrypted;
         }
     }
 }

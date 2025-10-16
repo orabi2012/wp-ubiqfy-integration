@@ -67,20 +67,20 @@ export class MerchantVoucherPurchaseDetail {
     provider_transaction_id: number | null; // e.g., 516
 
     @Column({ type: 'varchar', nullable: true })
-    reference: string | null; // e.g., "IAA9G86QUQLYZ3XF"
+    reference: string | null; // e.g., "IAA9G86QUQLYZ3XF" (encrypted at rest)
 
     @Column({ type: 'text', nullable: true })
-    redeem_url: string | null; // Redemption URL if provided
+    redeem_url: string | null; // Redemption URL if provided (encrypted at rest)
 
     // Legacy voucher fields (for backward compatibility)
     @Column({ type: 'text', nullable: true })
-    voucher_code: string | null;
+    voucher_code: string | null; // Encrypted voucher code
 
     @Column({ type: 'text', nullable: true })
-    voucher_pin: string | null;
+    voucher_pin: string | null; // Encrypted voucher pin
 
-    @Column({ type: 'json', nullable: true })
-    voucher_data: any; // Store complete voucher response
+    @Column({ type: 'text', nullable: true })
+    voucher_data: any; // Store complete voucher response (encrypted JSON)
 
     // Processing status
     @Column({
@@ -96,8 +96,8 @@ export class MerchantVoucherPurchaseDetail {
     @Column({ type: 'int', default: 0 })
     retry_count: number;
 
-    @Column({ type: 'json', nullable: true })
-    ubiqfy_response: any; // Store full Ubiqfy DoTransaction response
+    @Column({ type: 'text', nullable: true })
+    ubiqfy_response: any; // Store full Ubiqfy DoTransaction response (encrypted JSON)
 
     @Column({ type: 'text', nullable: true })
     notes: string | null;
