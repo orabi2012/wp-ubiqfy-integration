@@ -21,6 +21,8 @@ This NestJS-based web application serves as a secure bridge between WooCommerce 
 - **Automatic password migration** from plain text to encrypted format
 - **Store-specific access control** with role-based permissions
 - **Secure API communications** with HTTPS enforcement
+- **Voucher payload encryption** for serials, references, and Ubiqfy responses at rest
+- **Invoice redaction** automatically masks the first half of voucher keys on generated PDFs
 
 ### 🏪 **Advanced WooCommerce Integration**
 - **REST API Integration** - Direct integration with WooCommerce REST API v3
@@ -50,6 +52,7 @@ This NestJS-based web application serves as a secure bridge between WooCommerce 
 - **Professional invoice generation** with detailed breakdowns
 - **Comprehensive audit logging** for all transactions
 - **Failed transaction retry mechanisms** with intelligent error handling
+- **Automatic key masking** so printed invoices only display the trailing half of voucher codes
 
 ### 🌐 **Enterprise Store Management**
 - **Comprehensive store configuration** with encrypted credential storage
@@ -175,6 +178,8 @@ SANDBOX_UBIQFY_URL=https://api-sandbox.ubiqfy.com
 ```
 
 > **🔐 Security Note**: Generate a secure 256-bit encryption key for `ENCRYPTION_KEY`. Use `openssl rand -hex 32` to generate one.
+
+> **🛡️ Data Protection Update (2025-10)**: Voucher serial numbers, redemption references, and raw Ubiqfy responses are encrypted at rest with AES-256-GCM using `ENCRYPTION_KEY`. Runtime responses are decrypted per request, and invoices automatically redact the first half of every voucher key.
 
 > **📝 Important**: WooCommerce store credentials (Consumer Key/Secret) are manually configured per store through the admin interface for maximum security.
 
@@ -478,6 +483,11 @@ docker-compose up -d
 - **Encryption in Transit**: TLS 1.3 for all API communications
 - **Database Security**: Encrypted connections and parameterized queries
 - **Secret Management**: Environment variables with secure key generation
+
+#### Voucher Data Handling
+- Voucher details (serial numbers, references, redemption URLs, and Ubiqfy payloads) are stored encrypted using the platform-wide `ENCRYPTION_KEY`.
+- Services decrypt values only when needed, ensuring downstream integrations (WooCommerce sync, invoice rendering) operate on in-memory plaintext.
+- Generated invoices and dashboards display redacted voucher keys—the first half of each value is replaced with `X` characters to prevent disclosure if exported or printed.
 
 ### Authentication & Authorization
 - **JWT Security**: Secure token generation with configurable expiration
