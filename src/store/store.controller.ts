@@ -70,9 +70,17 @@ export class StoreController {
     @UseGuards(StoreAccessGuard)
     async getPurchaseOrdersIndex(@Request() req, @Res() res) {
         try {
-            // Get all purchase orders for this store
-            const purchases = await this.voucherPurchasesService.getPurchasesForStore(req.params.storeId);
             const store = await this.wpStoresService.findById(req.params.storeId);
+            if (!store) {
+                return res.render('error', {
+                    title: 'Store Not Found',
+                    message: 'The requested store could not be found. Please verify the URL or contact an administrator.',
+                    user: req.user,
+                });
+            }
+
+            // Get all purchase orders for this store matching current sandbox setting
+            const purchases = await this.voucherPurchasesService.getPurchasesForStore(req.params.storeId, !!store.ubiqfy_sandbox);
 
             return res.render('store/purchase-orders', {
                 title: 'Purchase Orders',

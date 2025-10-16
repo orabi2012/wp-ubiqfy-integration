@@ -378,9 +378,16 @@ export class VoucherPurchasesService {
     /**
      * Get all purchases for a store
      */
-    async getPurchasesForStore(storeId: string): Promise<MerchantVoucherPurchase[]> {
+    async getPurchasesForStore(storeId: string, sandboxOnly?: boolean): Promise<MerchantVoucherPurchase[]> {
+        const where: Record<string, any> = { wp_store_id: storeId };
+        if (sandboxOnly === true) {
+            where.is_sandbox = true;
+        } else if (sandboxOnly === false) {
+            where.is_sandbox = false;
+        }
+
         return await this.purchaseRepository.find({
-            where: { wp_store_id: storeId },
+            where,
             relations: ['purchaseItems', 'voucherDetails'],
             order: { created_at: 'DESC' }
         });

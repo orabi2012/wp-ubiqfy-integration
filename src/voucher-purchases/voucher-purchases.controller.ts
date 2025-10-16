@@ -41,8 +41,11 @@ export class VoucherPurchasesController {
             if (user.isSuperadmin) {
                 purchaseOrders = await this.voucherPurchasesService.getAllPurchases();
             } else if (user.assignedStoreId) {
-                purchaseOrders = await this.voucherPurchasesService.getPurchasesForStore(user.assignedStoreId);
                 activeStore = await this.wpStoreRepository.findOne({ where: { id: user.assignedStoreId } });
+                purchaseOrders = await this.voucherPurchasesService.getPurchasesForStore(
+                    user.assignedStoreId,
+                    !!activeStore?.ubiqfy_sandbox
+                );
                 sandboxEnvironment = !!activeStore?.ubiqfy_sandbox;
             }
 
@@ -118,7 +121,12 @@ export class VoucherPurchasesController {
     @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Get('store/:storeId')
     async getPurchasesForStore(@Request() req, @Param('storeId') storeId: string): Promise<MerchantVoucherPurchase[]> {
-        const purchases = await this.voucherPurchasesService.getPurchasesForStore(storeId);
+        const store = await this.wpStoreRepository.findOne({ where: { id: storeId } });
+        if (!store) {
+            throw new NotFoundException('Store not found');
+        }
+
+        const purchases = await this.voucherPurchasesService.getPurchasesForStore(storeId, !!store.ubiqfy_sandbox);
         return this.sanitizePurchases(purchases, !!req.user?.isSuperadmin);
     }
 
