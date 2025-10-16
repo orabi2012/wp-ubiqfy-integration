@@ -10,6 +10,7 @@ import { VoucherPurchasesController } from './voucher-purchases.controller';
 import { DoTransactionService } from './dotransaction.service';
 import { UbiqfyProductsModule } from '../ubiqfy-products/ubiqfy-products.module';
 import { wpStoresModule } from '../wp-stores/wp-stores.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
     imports: [
@@ -21,7 +22,8 @@ import { wpStoresModule } from '../wp-stores/wp-stores.module';
             wpStore
         ]),
         UbiqfyProductsModule,
-        wpStoresModule
+        wpStoresModule,
+        AuthModule
     ],
     controllers: [VoucherPurchasesController],
     providers: [VoucherPurchasesService, DoTransactionService],

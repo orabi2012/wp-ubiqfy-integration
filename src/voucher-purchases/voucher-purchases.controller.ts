@@ -1,11 +1,13 @@
-import { Controller, Get, Post, Body, Param, Logger, ValidationPipe, UsePipes, Delete, Put, UseGuards, Request, Render, Response } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Logger, ValidationPipe, UsePipes, Delete, Put, UseGuards, Request, Render, Response, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { VoucherPurchasesService } from './voucher-purchases.service';
 import { DoTransactionService } from './dotransaction.service';
-import { MerchantVoucherPurchase } from './merchant-voucher-purchase.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { wpStore } from '../wp-stores/wp-stores.entity';
 import { AuthGuard } from '@nestjs/passport';
+import { StoreAccessGuard } from '../auth/store-access.guard';
+import { MerchantVoucherPurchase } from './merchant-voucher-purchase.entity';
+import { MerchantVoucherPurchaseDetail } from './merchant-voucher-purchase-detail.entity';
 
 @Controller('voucher-purchases')
 export class VoucherPurchasesController {
@@ -81,6 +83,7 @@ export class VoucherPurchasesController {
                 return {
                     ...order,
                     storeName: store ? store.wp_store_name : 'Unknown Store',
+                    isSandbox: typeof order.is_sandbox === 'boolean' ? order.is_sandbox : !!store?.ubiqfy_sandbox,
                     itemCount,
                     voucherStats
                 };
@@ -112,25 +115,40 @@ export class VoucherPurchasesController {
     /**
      * Get all purchases for a store
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Get('store/:storeId')
-    async getPurchasesForStore(@Param('storeId') storeId: string): Promise<MerchantVoucherPurchase[]> {
-        return await this.voucherPurchasesService.getPurchasesForStore(storeId);
+    async getPurchasesForStore(@Request() req, @Param('storeId') storeId: string): Promise<MerchantVoucherPurchase[]> {
+        const purchases = await this.voucherPurchasesService.getPurchasesForStore(storeId);
+        return this.sanitizePurchases(purchases, !!req.user?.isSuperadmin);
     }
 
     /**
      * Get purchase with details
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Get(':purchaseId')
-    async getPurchaseDetails(@Param('purchaseId') purchaseId: string): Promise<MerchantVoucherPurchase | null> {
-        return await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+    async getPurchaseDetails(@Request() req, @Param('purchaseId') purchaseId: string): Promise<MerchantVoucherPurchase | null> {
+        const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+        if (!purchase) {
+            throw new NotFoundException('Purchase order not found');
+        }
+
+        this.assertPurchaseAccess(purchase, req.user);
+        return this.sanitizePurchase(purchase, !!req.user?.isSuperadmin);
     }
 
     /**
      * Delete purchase order and all related records
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Delete(':purchaseId')
-    async deletePurchaseOrder(@Param('purchaseId') purchaseId: string) {
+    async deletePurchaseOrder(@Request() req, @Param('purchaseId') purchaseId: string) {
         try {
+            const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+            if (!purchase) {
+                throw new NotFoundException('Purchase order not found');
+            }
+            this.assertPurchaseAccess(purchase, req.user);
             const result = await this.voucherPurchasesService.deletePurchaseOrder(purchaseId);
             return {
                 success: result.success,
@@ -145,8 +163,10 @@ export class VoucherPurchasesController {
     /**
      * Create new draft purchase
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Post('create/:storeId/:userId')
     async createDraftPurchase(
+        @Request() req,
         @Param('storeId') storeId: string,
         @Param('userId') userId: string,
         @Body() createData?: {
@@ -164,7 +184,12 @@ export class VoucherPurchasesController {
         }
     ) {
         try {
-            const purchaseOrder = await this.voucherPurchasesService.createDraftPurchase(storeId, userId);
+            if (!req.user?.isSuperadmin && req.user?.userId !== userId) {
+                throw new ForbiddenException('Cannot create purchase order for a different user');
+            }
+
+            const creatorUserId = req.user?.isSuperadmin ? userId : req.user?.userId;
+            const purchaseOrder = await this.voucherPurchasesService.createDraftPurchase(storeId, creatorUserId);
 
             // If products are provided, add them to the purchase order
             if (createData?.products && createData.products.length > 0) {
@@ -184,10 +209,14 @@ export class VoucherPurchasesController {
 
                 // Get the updated purchase order with items
                 const updatedPurchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseOrder.id);
+                if (!updatedPurchase) {
+                    throw new NotFoundException('Purchase order not found after creation');
+                }
+                this.assertPurchaseAccess(updatedPurchase, req.user);
                 return {
                     success: true,
                     message: `Purchase order created with ${createData.products.length} items`,
-                    purchaseOrder: updatedPurchase
+                    purchaseOrder: this.sanitizePurchase(updatedPurchase, !!req.user?.isSuperadmin)
                 };
             }
 
@@ -207,8 +236,10 @@ export class VoucherPurchasesController {
     /**
      * Add item to purchase
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Post(':purchaseId/items')
     async addPurchaseItem(
+        @Request() req,
         @Param('purchaseId') purchaseId: string,
         @Body() itemData: {
             product_type_code: string;
@@ -222,37 +253,57 @@ export class VoucherPurchasesController {
             unit_wholesale_price?: number;
         }
     ) {
+        const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+        if (!purchase) {
+            throw new NotFoundException('Purchase order not found');
+        }
+        this.assertPurchaseAccess(purchase, req.user);
         return await this.voucherPurchasesService.addPurchaseItem(purchaseId, itemData);
     }
 
     /**
      * Remove item from purchase
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Delete(':purchaseId/items/:itemId')
     async removePurchaseItem(
+        @Request() req,
         @Param('purchaseId') purchaseId: string,
         @Param('itemId') itemId: string
     ) {
+        const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+        if (!purchase) {
+            throw new NotFoundException('Purchase order not found');
+        }
+        this.assertPurchaseAccess(purchase, req.user);
         return await this.voucherPurchasesService.removePurchaseItem(purchaseId, itemId);
     }
 
     /**
      * Update item quantity
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Put(':purchaseId/items/:itemId')
     async updatePurchaseItemQuantity(
+        @Request() req,
         @Param('purchaseId') purchaseId: string,
         @Param('itemId') itemId: string,
         @Body() updateData: { quantity_ordered: number }
     ) {
+        const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+        if (!purchase) {
+            throw new NotFoundException('Purchase order not found');
+        }
+        this.assertPurchaseAccess(purchase, req.user);
         return await this.voucherPurchasesService.updatePurchaseItemQuantity(purchaseId, itemId, updateData.quantity_ordered);
     }
 
     /**
      * Update pricing for all store products (bulk update)
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Post('update-pricing/:storeId')
-    async updateStorePricing(@Param('storeId') storeId: string) {
+    async updateStorePricing(@Request() req, @Param('storeId') storeId: string) {
         this.logger.log(`Updating pricing for store ${storeId}`);
 
         try {
@@ -274,11 +325,17 @@ export class VoucherPurchasesController {
     /**
      * Check balance and update pricing before processing
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Post(':purchaseId/check-balance')
-    async checkBalance(@Param('purchaseId') purchaseId: string) {
+    async checkBalance(@Request() req, @Param('purchaseId') purchaseId: string) {
         this.logger.log(`Checking balance for purchase ${purchaseId}`);
 
         try {
+            const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+            if (!purchase) {
+                throw new NotFoundException('Purchase order not found');
+            }
+            this.assertPurchaseAccess(purchase, req.user);
             const balanceCheck = await this.doTransactionService.checkBalanceAndUpdatePricing(purchaseId);
 
             return {
@@ -304,11 +361,17 @@ export class VoucherPurchasesController {
     /**
      * Confirm purchase order - check balance and perform transaction
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Post(':purchaseId/confirm')
-    async confirmPurchaseOrder(@Param('purchaseId') purchaseId: string) {
+    async confirmPurchaseOrder(@Request() req, @Param('purchaseId') purchaseId: string) {
         this.logger.log(`Confirming purchase order ${purchaseId}`);
 
         try {
+            const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+            if (!purchase) {
+                throw new NotFoundException('Purchase order not found');
+            }
+            this.assertPurchaseAccess(purchase, req.user);
             // Step 1: Check balance with cent precision
             const balanceCheck = await this.doTransactionService.checkBalanceAndUpdatePricing(purchaseId);
 
@@ -351,8 +414,14 @@ export class VoucherPurchasesController {
     /**
      * Submit purchase order for processing
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Post(':purchaseId/submit')
-    async submitPurchaseOrder(@Param('purchaseId') purchaseId: string) {
+    async submitPurchaseOrder(@Request() req, @Param('purchaseId') purchaseId: string) {
+        const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+        if (!purchase) {
+            throw new NotFoundException('Purchase order not found');
+        }
+        this.assertPurchaseAccess(purchase, req.user);
         await this.voucherPurchasesService.submitPurchaseOrder(purchaseId);
         return { message: 'Purchase order submitted for processing' };
     }
@@ -360,9 +429,16 @@ export class VoucherPurchasesController {
     /**
      * Process purchase order through DoTransaction
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Post(':purchaseId/process')
-    async processPurchaseOrder(@Param('purchaseId') purchaseId: string) {
+    async processPurchaseOrder(@Request() req, @Param('purchaseId') purchaseId: string) {
         this.logger.log(`Processing purchase order ${purchaseId}`);
+
+        const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+        if (!purchase) {
+            throw new NotFoundException('Purchase order not found');
+        }
+        this.assertPurchaseAccess(purchase, req.user);
 
         // Process in background
         this.doTransactionService.processPurchaseOrder(purchaseId)
@@ -379,9 +455,16 @@ export class VoucherPurchasesController {
     /**
      * Retry failed vouchers
      */
+    @UseGuards(AuthGuard('jwt'), StoreAccessGuard)
     @Post(':purchaseId/retry-failed')
-    async retryFailedVouchers(@Param('purchaseId') purchaseId: string) {
+    async retryFailedVouchers(@Request() req, @Param('purchaseId') purchaseId: string) {
         this.logger.log(`Retrying failed vouchers for purchase ${purchaseId}`);
+
+        const purchase = await this.voucherPurchasesService.getPurchaseWithDetails(purchaseId);
+        if (!purchase) {
+            throw new NotFoundException('Purchase order not found');
+        }
+        this.assertPurchaseAccess(purchase, req.user);
 
         // Process in background
         this.doTransactionService.retryFailedVouchers(purchaseId)
@@ -419,6 +502,58 @@ export class VoucherPurchasesController {
                 error: error.message
             };
         }
+    }
+
+    private assertPurchaseAccess(purchase: MerchantVoucherPurchase, user: any) {
+        if (!user) {
+            throw new ForbiddenException('User not authenticated');
+        }
+        if (user.isSuperadmin) {
+            return;
+        }
+        if (!user.assignedStoreId || purchase.wp_store_id !== user.assignedStoreId) {
+            throw new ForbiddenException('Access denied to this purchase order');
+        }
+    }
+
+    private sanitizePurchases(purchases: MerchantVoucherPurchase[], canViewSecrets: boolean): MerchantVoucherPurchase[] {
+        return purchases.map(purchase => this.sanitizePurchase(purchase, canViewSecrets));
+    }
+
+    private sanitizePurchase(purchase: MerchantVoucherPurchase, canViewSecrets: boolean): MerchantVoucherPurchase {
+        if (!purchase) {
+            return purchase;
+        }
+        const sanitizedPurchase: any = { ...purchase };
+
+        if (!canViewSecrets && sanitizedPurchase.voucherDetails?.length) {
+            sanitizedPurchase.voucherDetails = sanitizedPurchase.voucherDetails.map((detail: MerchantVoucherPurchaseDetail) => {
+                const sanitizedDetail: any = { ...detail };
+                sanitizedDetail.serial_number = this.maskValue(detail.serial_number);
+                sanitizedDetail.reference = this.maskValue(detail.reference);
+                sanitizedDetail.redeem_url = detail.redeem_url ? '[REDACTED]' : null;
+                sanitizedDetail.voucher_code = this.maskValue(detail.voucher_code);
+                sanitizedDetail.voucher_pin = this.maskValue(detail.voucher_pin);
+                sanitizedDetail.voucher_data = detail.voucher_data ? '[REDACTED]' : null;
+                sanitizedDetail.ubiqfy_response = detail.ubiqfy_response ? '[REDACTED]' : null;
+                return sanitizedDetail;
+            });
+        }
+
+        return sanitizedPurchase;
+    }
+
+    private maskValue(value: string | null | undefined): string | null {
+        if (!value) {
+            return value ?? null;
+        }
+        const trimmed = value.trim();
+        if (trimmed.length <= 4) {
+            return '****';
+        }
+        const start = trimmed.slice(0, 4);
+        const end = trimmed.slice(-4);
+        return `${start}…${end}`;
     }
 
     /**

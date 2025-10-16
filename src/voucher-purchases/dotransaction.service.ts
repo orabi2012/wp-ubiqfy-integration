@@ -138,6 +138,12 @@ export class DoTransactionService {
             throw new Error('Purchase or associated store not found');
         }
 
+        const purchaseSandbox = !!purchaseWithStore.wpStore.ubiqfy_sandbox;
+        if (purchaseWithStore.is_sandbox !== purchaseSandbox) {
+            purchaseWithStore.is_sandbox = purchaseSandbox;
+            await this.purchaseRepository.update(purchaseWithStore.id, { is_sandbox: purchaseSandbox });
+        }
+
         // Get current balance from auth endpoint using store credentials - reuse existing service
         const authResult = await this.wpStoresService.authenticateWithUbiqfy(purchaseWithStore.wpStore.id);
 

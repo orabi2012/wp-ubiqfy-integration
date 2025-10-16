@@ -30,6 +30,9 @@ export class MerchantVoucherPurchase {
     @Column({ type: 'uuid' })
     wp_store_id: string;
 
+    @Column({ type: 'boolean', default: false })
+    is_sandbox: boolean;
+
     @ManyToOne(() => wpStore)
     @JoinColumn({ name: 'wp_store_id' })
     wpStore: wpStore;

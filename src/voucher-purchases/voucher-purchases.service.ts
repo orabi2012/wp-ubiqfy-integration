@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { MerchantVoucherPurchase, PurchaseOrderStatus } from './merchant-voucher-purchase.entity';
 import { MerchantVoucherPurchaseItem } from './merchant-voucher-purchase-item.entity';
 import { MerchantVoucherPurchaseDetail, VoucherStatus } from './merchant-voucher-purchase-detail.entity';
+import { wpStore } from '../wp-stores/wp-stores.entity';
 import { isValidUUID } from '../utils/uuid.helper';
 
 @Injectable()
@@ -17,6 +18,8 @@ export class VoucherPurchasesService {
         private readonly purchaseItemRepository: Repository<MerchantVoucherPurchaseItem>,
         @InjectRepository(MerchantVoucherPurchaseDetail)
         private readonly purchaseDetailRepository: Repository<MerchantVoucherPurchaseDetail>,
+        @InjectRepository(wpStore)
+        private readonly wpStoreRepository: Repository<wpStore>,
     ) { }
 
     /**
@@ -31,6 +34,11 @@ export class VoucherPurchasesService {
             throw new BadRequestException('Invalid store ID format. Store ID must be a valid UUID.');
         }
 
+        const store = await this.wpStoreRepository.findOne({ where: { id: storeId } });
+        if (!store) {
+            throw new BadRequestException('Store not found');
+        }
+
         const purchaseOrderNumber = await this.generatePurchaseOrderNumber();
 
         const purchase = new MerchantVoucherPurchase();
@@ -41,6 +49,7 @@ export class VoucherPurchasesService {
         purchase.total_wholesale_cost = 0;
         purchase.currency = 'USD'; // Ubiqfy transactions are always in USD
         purchase.total_vouchers_ordered = 0;
+        purchase.is_sandbox = !!store.ubiqfy_sandbox;
 
         return await this.purchaseRepository.save(purchase);
     }
