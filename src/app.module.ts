@@ -11,6 +11,7 @@ import { UbiqfyProductsModule } from './ubiqfy-products/ubiqfy-products.module';
 import { VoucherPurchasesModule } from './voucher-purchases/voucher-purchases.module';
 import { AdminModule } from './admin/admin.module';
 import { UtilsModule } from './utils/utils.module';
+import { IpModule } from './ip/ip.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { UtilsModule } from './utils/utils.module';
     UsersModule,
     AdminModule,
     UtilsModule,
+    IpModule,
   ],
   controllers: [AppController],
   providers: [],
